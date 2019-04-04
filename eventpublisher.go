@@ -36,7 +36,7 @@ type Event struct {
 	SessionID        string                 `json:"session_id"`
 	Privacy          bool                   `json:"privacy"`
 	Realm            string                 `json:"realm"`
-	AdditionalFields map[string]interface{} `json:"additional_fields"`
+	AdditionalFields map[string]interface{} `json:"additional_fields,omitempty"`
 }
 
 // NewEvent creates new Event without additional fields

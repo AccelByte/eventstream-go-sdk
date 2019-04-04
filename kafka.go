@@ -39,6 +39,7 @@ func NewKafkaClient(realm string, brokerList []string) (*KafkaClient, error) {
 	if err != nil {
 		return nil, err
 	}
+	config.Producer.Return.Successes = true
 	syncProducer, err := sarama.NewSyncProducer(brokerList, config)
 	if err != nil {
 		return nil, err
