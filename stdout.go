@@ -26,8 +26,7 @@ import (
 
 // StdoutClient satisfies the publisher for mocking
 type StdoutClient struct {
-	realm    string
-	clientID []string
+	realm string
 }
 
 // NewStdoutClient creates new telemetry client

@@ -12,15 +12,27 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
- clean:
-	rm coverage.out
+---
+version: '2.4'
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:5.2.1
+    ports:
+      - "2181:2181"
+    environment:
+      ZOOKEEPER_SERVER_ID: 1
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+      ZOOKEEPER_INIT_LIMIT: 5
+      ZOOKEEPER_SYNC_LIMIT: 2
 
-test:
-	docker-compose -f docker-compose-test.yml up -d
-	sleep 30
-	go test -v -cover ./...
-	docker-compose -f docker-compose-test.yml stop
-
-coverage:
-	go test -coverprofile=coverage.out ./...
-	go tool cover -html=coverage.out
+  kafka:
+    image: confluentinc/cp-kafka:5.2.1
+    ports:
+      - "9092:9092"
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092

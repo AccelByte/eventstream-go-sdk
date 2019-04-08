@@ -19,7 +19,7 @@ package main
 import (
 	"time"
 
-	"github.com/AccelByte/eventstream-go-sdk"
+	eventpublisher "github.com/AccelByte/eventstream-go-sdk"
 )
 
 func main() {
