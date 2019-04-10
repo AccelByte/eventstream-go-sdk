@@ -33,11 +33,13 @@ type KafkaClient struct {
 
 // NewKafkaClient creates new client to publish event to kafka
 func NewKafkaClient(realm string, brokerList []string) (*KafkaClient, error) {
-	config := sarama.NewConfig()
-	asyncProducer, err := sarama.NewAsyncProducer(brokerList, config)
+	configAsync := sarama.NewConfig()
+	asyncProducer, err := sarama.NewAsyncProducer(brokerList, configAsync)
 	if err != nil {
 		return nil, err
 	}
+
+	config := sarama.NewConfig()
 	config.Producer.Return.Successes = true
 	syncProducer, err := sarama.NewSyncProducer(brokerList, config)
 	if err != nil {
