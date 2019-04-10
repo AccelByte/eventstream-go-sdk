@@ -30,7 +30,7 @@ func TestIntegrationPublishEventKafkaSynchronousSuccess(t *testing.T) {
 	event := NewEvent(123, 99, 4, "iam", []string{"8dbf8e7f673242b3ad02e7cf1be90792"},
 		"09cb90e74270445d9f85309b23d612a7", []string{"8dbf8e7f673242b3ad02e7cf1be90792"}, "accelbyte",
 		"accelbyte", "4e4e17820f4a4b2aa19a843369033fe4", "cf1884b311e345e0b4a96988ed6b887b",
-		true).
+		true, "topic_name").
 		WithFields(map[string]interface{}{
 			"age":           12,
 			"email_address": "test@example.com",
@@ -43,7 +43,7 @@ func TestIntegrationPublishEventKafkaSynchronousSuccess(t *testing.T) {
 		broker := sarama.NewBroker("localhost:9092")
 		_ = broker.Open(config)
 		_, _ = broker.DeleteTopics(&sarama.DeleteTopicsRequest{
-			Topics:  []string{"topic_99"},
+			Topics:  []string{"topic_name"},
 			Version: 3,
 		})
 		_ = broker.Close()
@@ -56,7 +56,7 @@ func TestIntegrationPublishEventKafkaSynchronousSuccess(t *testing.T) {
 		consumer, _ := sarama.NewConsumer([]string{"localhost:9092"}, config)
 		defer consumer.Close()
 
-		res, _ := consumer.ConsumePartition("topic_99", 0, 0)
+		res, _ := consumer.ConsumePartition("topic_name", 0, 0)
 		defer res.Close()
 
 		msg := <-res.Messages()
@@ -81,7 +81,7 @@ func TestIntegrationPublishEventKafkaAsynchronousSuccess(t *testing.T) {
 	event := NewEvent(123, 91, 4, "iam", []string{"8dbf8e7f673242b3ad02e7cf1be90792"},
 		"09cb90e74270445d9f85309b23d612a7", []string{"8dbf8e7f673242b3ad02e7cf1be90792"}, "accelbyte",
 		"accelbyte", "4e4e17820f4a4b2aa19a843369033fe4", "cf1884b311e345e0b4a96988ed6b887b",
-		true).
+		true, "topic_name2").
 		WithFields(map[string]interface{}{
 			"age":           12,
 			"email_address": "test@example.com",
@@ -94,7 +94,7 @@ func TestIntegrationPublishEventKafkaAsynchronousSuccess(t *testing.T) {
 		broker := sarama.NewBroker("localhost:9092")
 		_ = broker.Open(config)
 		_, _ = broker.DeleteTopics(&sarama.DeleteTopicsRequest{
-			Topics:  []string{"topic_91"},
+			Topics:  []string{"topic_name2"},
 			Version: 3,
 		})
 		_ = broker.Close()
@@ -107,7 +107,7 @@ func TestIntegrationPublishEventKafkaAsynchronousSuccess(t *testing.T) {
 		consumer, _ := sarama.NewConsumer([]string{"localhost:9092"}, config)
 		defer consumer.Close()
 
-		res, _ := consumer.ConsumePartition("topic_91", 0, 0)
+		res, _ := consumer.ConsumePartition("topic_name2", 0, 0)
 		defer res.Close()
 
 		msg := <-res.Messages()

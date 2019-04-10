@@ -28,7 +28,7 @@ func main() {
 	event := ConstructUserRegistrationEvent(13, 12, 1, "IAM", []string{"70daa46c789640cf8ae0a7a4027ee006"},
 		"a5584584badf42bba5a9954434b27ef4", []string{"a5584584badf42bba5a9954434b27ef4"}, "accelbyte",
 		"accelbyte", "a349286b153f469ca311763ada8d1635", "4b9cbf8f61fb4b7eb60d1591ca7e90a5",
-		true, "test display", "email@example.com", 12)
+		true, "topic_name", "test display", "email@example.com", 12)
 
 	client.PublishEventAsync(event)
 
@@ -47,12 +47,13 @@ func ConstructUserRegistrationEvent(eventID int,
 	traceID string,
 	sessionID string,
 	privacy bool,
+	topic string,
 	displayName string,
 	emailAddress string,
 	age int) *eventpublisher.Event {
 
 	return eventpublisher.NewEvent(eventID, eventType, eventLevel, service, clientIDs, userID, targetUserIDs,
-		namespace, targetNamespace, traceID, sessionID, privacy).
+		namespace, targetNamespace, traceID, sessionID, privacy, topic).
 		WithFields(map[string]interface{}{
 			"display_name":  displayName,
 			"email_address": emailAddress,
