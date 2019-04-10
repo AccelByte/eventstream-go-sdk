@@ -7,8 +7,9 @@ Go SDK for integrating with AccelByte's event stream
 Currently these stream are supported by this library:
 
 ### Kafka stream
-This will publish an event in to Kafka stream. Each event type will be published into different topic by using this 
-format: `topic_<event_type>`. For example, if event has `event_type=1`, it will be pushed to `topic_1` Kafka topic.
+This will publish an event in to Kafka stream. Each event type will be published into different topic by using the topic
+field inside the event. For example, if event has `event.topic=update_user`, it will be pushed to `update_user` Kafka 
+topic.
 
 To create a client for publishing to Kafka stream, use this function:
 ```go
