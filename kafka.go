@@ -18,7 +18,6 @@ package eventpublisher
 
 import (
 	"encoding/json"
-	"fmt"
 	"time"
 
 	"github.com/Shopify/sarama"
@@ -95,7 +94,7 @@ func (client *KafkaClient) PublishEvent(event *Event) error {
 		Value: &eventEntry{
 			Event: *event,
 		},
-		Topic: fmt.Sprintf("topic_%d", event.EventType),
+		Topic: event.Topic,
 	})
 
 	return err
@@ -111,6 +110,6 @@ func (client *KafkaClient) PublishEventAsync(event *Event) {
 		Value: &eventEntry{
 			Event: *event,
 		},
-		Topic: fmt.Sprintf("topic_%d", event.EventType),
+		Topic: event.Topic,
 	}
 }

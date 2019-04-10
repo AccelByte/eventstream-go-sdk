@@ -36,6 +36,7 @@ type Event struct {
 	SessionID        string                 `json:"session_id"`
 	Privacy          bool                   `json:"privacy"`
 	Realm            string                 `json:"realm"`
+	Topic            string                 `json:"topic"`
 	AdditionalFields map[string]interface{} `json:"additional_fields,omitempty"`
 }
 
@@ -51,7 +52,8 @@ func NewEvent(eventID int,
 	targetNamespace string,
 	traceID string,
 	sessionID string,
-	privacy bool) *Event {
+	privacy bool,
+	topic string) *Event {
 	return &Event{
 		EventID:         eventID,
 		EventType:       eventType,
@@ -65,6 +67,7 @@ func NewEvent(eventID int,
 		TraceID:         traceID,
 		SessionID:       sessionID,
 		Privacy:         privacy,
+		Topic:           topic,
 	}
 }
 

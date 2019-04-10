@@ -52,7 +52,7 @@ func TestPublishEventKafkaAsyncSuccess(t *testing.T) {
 	event := NewEvent(123, 99, 4, "iam", []string{"8dbf8e7f673242b3ad02e7cf1be90792"},
 		"09cb90e74270445d9f85309b23d612a7", []string{"8dbf8e7f673242b3ad02e7cf1be90792"}, "accelbyte",
 		"accelbyte", "4e4e17820f4a4b2aa19a843369033fe4", "cf1884b311e345e0b4a96988ed6b887b",
-		true).
+		true, "topic_name").
 		WithFields(map[string]interface{}{
 			"age":           12,
 			"email_address": "test@example.com",
@@ -65,7 +65,7 @@ func TestPublishEventKafkaAsyncSuccess(t *testing.T) {
 	expected, _ := json.Marshal(event)
 
 	assert.Equal(t, string(expected), string(actual), "event in the producer is not equal")
-	assert.Equal(t, actualEvent.Topic, fmt.Sprintf("topic_%d", event.EventType), "topic is not equal")
+	assert.Equal(t, actualEvent.Topic, fmt.Sprintf("topic_name"), "topic is not equal")
 }
 
 func TestPublishEventKafkaSynchronousSuccess(t *testing.T) {
@@ -87,7 +87,7 @@ func TestPublishEventKafkaSynchronousSuccess(t *testing.T) {
 	event := NewEvent(123, 99, 4, "iam", []string{"8dbf8e7f673242b3ad02e7cf1be90792"},
 		"09cb90e74270445d9f85309b23d612a7", []string{"8dbf8e7f673242b3ad02e7cf1be90792"}, "accelbyte",
 		"accelbyte", "4e4e17820f4a4b2aa19a843369033fe4", "cf1884b311e345e0b4a96988ed6b887b",
-		true).
+		true, "topic_name").
 		WithFields(map[string]interface{}{
 			"age":           12,
 			"email_address": "test@example.com",
