@@ -19,13 +19,21 @@ package eventpublisher
 import (
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/Shopify/sarama"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestIntegrationPublishEventKafkaSynchronousSuccess(t *testing.T) {
-	client, _ := NewKafkaClient("test", []string{"localhost:9092"})
+	producerConf := &KafkaConfig{
+		ReadTimeout:          250 * time.Millisecond,
+		DialTimeout:          250 * time.Millisecond,
+		WriteTimeout:         250 * time.Millisecond,
+		MetadataRetryBackoff: 250 * time.Millisecond,
+		MetadataRetryMax:     3,
+	}
+	client, _ := NewKafkaClient("test", []string{"localhost:9092"}, producerConf, producerConf)
 
 	event := NewEvent(123, 99, 4, "iam", []string{"8dbf8e7f673242b3ad02e7cf1be90792"},
 		"09cb90e74270445d9f85309b23d612a7", []string{"8dbf8e7f673242b3ad02e7cf1be90792"}, "accelbyte",
@@ -37,6 +45,11 @@ func TestIntegrationPublishEventKafkaSynchronousSuccess(t *testing.T) {
 		})
 
 	config := sarama.NewConfig()
+	config.Net.DialTimeout = 250 * time.Millisecond
+	config.Net.ReadTimeout = 250 * time.Millisecond
+	config.Net.WriteTimeout = 250 * time.Millisecond
+	config.Metadata.Retry.Backoff = 250 * time.Millisecond
+	config.Metadata.Retry.Max = 3
 	config.Version = sarama.V2_1_0_0
 
 	defer func() {
@@ -76,7 +89,14 @@ func TestIntegrationPublishEventKafkaSynchronousSuccess(t *testing.T) {
 }
 
 func TestIntegrationPublishEventKafkaAsynchronousSuccess(t *testing.T) {
-	client, _ := NewKafkaClient("test", []string{"localhost:9092"})
+	producerConf := &KafkaConfig{
+		ReadTimeout:          250 * time.Millisecond,
+		DialTimeout:          250 * time.Millisecond,
+		WriteTimeout:         250 * time.Millisecond,
+		MetadataRetryBackoff: 250 * time.Millisecond,
+		MetadataRetryMax:     3,
+	}
+	client, _ := NewKafkaClient("test", []string{"localhost:9092"}, producerConf, producerConf)
 
 	event := NewEvent(123, 91, 4, "iam", []string{"8dbf8e7f673242b3ad02e7cf1be90792"},
 		"09cb90e74270445d9f85309b23d612a7", []string{"8dbf8e7f673242b3ad02e7cf1be90792"}, "accelbyte",
@@ -88,6 +108,11 @@ func TestIntegrationPublishEventKafkaAsynchronousSuccess(t *testing.T) {
 		})
 
 	config := sarama.NewConfig()
+	config.Net.DialTimeout = 250 * time.Millisecond
+	config.Net.ReadTimeout = 250 * time.Millisecond
+	config.Net.WriteTimeout = 250 * time.Millisecond
+	config.Metadata.Retry.Backoff = 250 * time.Millisecond
+	config.Metadata.Retry.Max = 3
 	config.Version = sarama.V2_1_0_0
 
 	defer func() {
