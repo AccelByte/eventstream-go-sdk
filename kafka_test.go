@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/Shopify/sarama"
 	"github.com/Shopify/sarama/mocks"
@@ -27,9 +28,35 @@ import (
 )
 
 func TestNewKafkaClientError(t *testing.T) {
-	client, err := NewKafkaClient("test", []string{"localhost"})
+	producerConf := &KafkaConfig{
+		ReadTimeout:          time.Millisecond,
+		DialTimeout:          time.Millisecond,
+		WriteTimeout:         time.Millisecond,
+		MetadataRetryBackoff: time.Millisecond,
+		MetadataRetryMax:     3,
+	}
+	client, err := NewKafkaClient("test", []string{"localhost"}, producerConf, producerConf)
 	assert.Error(t, err)
 	assert.Nil(t, client)
+}
+
+func TestNewKafkaClientSuccess(t *testing.T) {
+	client, err := NewKafkaClient("test", []string{"localhost:9092"})
+	assert.NoError(t, err)
+	assert.NotNil(t, client)
+}
+
+func TestNewKafkaClientSuccessOnlySetAsyncProducerConfig(t *testing.T) {
+	producerConf := &KafkaConfig{
+		ReadTimeout:          time.Second,
+		DialTimeout:          time.Second,
+		WriteTimeout:         time.Second,
+		MetadataRetryBackoff: 250 * time.Millisecond,
+		MetadataRetryMax:     3,
+	}
+	client, err := NewKafkaClient("test", []string{"localhost:9092"}, producerConf)
+	assert.NoError(t, err)
+	assert.NotNil(t, client)
 }
 
 func TestPublishEventKafkaAsyncSuccess(t *testing.T) {

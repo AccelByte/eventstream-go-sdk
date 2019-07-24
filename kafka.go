@@ -31,17 +31,40 @@ type KafkaClient struct {
 	syncProducer  sarama.SyncProducer
 }
 
+// KafkaConfig is Kafka configuration to wait for a successful metadata response
+type KafkaConfig struct {
+	DialTimeout          time.Duration
+	ReadTimeout          time.Duration
+	WriteTimeout         time.Duration
+	MetadataRetryMax     int
+	MetadataRetryBackoff time.Duration
+}
+
 // NewKafkaClient creates new client to publish event to kafka
-func NewKafkaClient(realm string, brokerList []string) (*KafkaClient, error) {
-	configAsync := sarama.NewConfig()
+// The first producerConfiguration is the asynchronous producer configuration
+// meanwhile the second is the synchronous one
+func NewKafkaClient(realm string, brokerList []string, producerConfiguration ...*KafkaConfig) (*KafkaClient, error) {
+
+	var configAsync, configSync *sarama.Config
+	switch {
+	case len(producerConfiguration) > 1:
+		configAsync = configureKafka(producerConfiguration[0])
+		configSync = configureKafka(producerConfiguration[1])
+	case len(producerConfiguration) == 1:
+		configAsync = configureKafka(producerConfiguration[0])
+		configSync = sarama.NewConfig()
+	default:
+		configAsync = sarama.NewConfig()
+		configSync = sarama.NewConfig()
+	}
+
 	asyncProducer, err := sarama.NewAsyncProducer(brokerList, configAsync)
 	if err != nil {
 		return nil, err
 	}
 
-	config := sarama.NewConfig()
-	config.Producer.Return.Successes = true
-	syncProducer, err := sarama.NewSyncProducer(brokerList, config)
+	configSync.Producer.Return.Successes = true
+	syncProducer, err := sarama.NewSyncProducer(brokerList, configSync)
 	if err != nil {
 		return nil, err
 	}
@@ -114,4 +137,25 @@ func (client *KafkaClient) PublishEventAsync(event *Event) {
 		},
 		Topic: event.Topic,
 	}
+}
+
+// configureKafka configure kafka
+func configureKafka(kafkaConfig *KafkaConfig) (config *sarama.Config) {
+	config = sarama.NewConfig()
+	if kafkaConfig.DialTimeout != 0 {
+		config.Net.DialTimeout = kafkaConfig.DialTimeout
+	}
+	if kafkaConfig.ReadTimeout != 0 {
+		config.Net.ReadTimeout = kafkaConfig.ReadTimeout
+	}
+	if kafkaConfig.WriteTimeout != 0 {
+		config.Net.WriteTimeout = kafkaConfig.WriteTimeout
+	}
+	if kafkaConfig.MetadataRetryMax != 0 {
+		config.Metadata.Retry.Max = kafkaConfig.MetadataRetryMax
+	}
+	if kafkaConfig.MetadataRetryBackoff != 0 {
+		config.Metadata.Retry.Backoff = kafkaConfig.MetadataRetryBackoff
+	}
+	return config
 }
