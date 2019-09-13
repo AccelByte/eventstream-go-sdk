@@ -13,6 +13,7 @@
 .idea/inspectionProfiles/
 .idea/misc.xml
 .idea/modules.xml
-.idea/telemetry-go-sdk.iml
+.idea/eventstream-go-sdk.iml
 .idea/vcs.xml
 .idea/workspace.xml
+.idea/watcherTasks.xml

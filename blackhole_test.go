@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package eventpublisher
+package eventstream
 
 import (
 	"testing"
@@ -23,19 +23,18 @@ import (
 )
 
 func TestNewBlackholeClient(t *testing.T) {
-	client := NewBlackholeClient()
+	client, err := NewBlackholeClient()
 	expectedClient := &BlackholeClient{}
 	assert.Equal(t, expectedClient, client, "client should be equal")
+	assert.Nil(t, err, "error should be nil")
 }
 
-func TestPublishEventBlackholeAsync(t *testing.T) {
+func TestBlackholePublish(t *testing.T) {
 	client := &BlackholeClient{}
-	client.PublishEventAsync(nil)
+	client.Publish(nil)
 }
 
-func TestPublishEventBlackholeSync(t *testing.T) {
+func TestBlackholeSubscribe(t *testing.T) {
 	client := &BlackholeClient{}
-
-	err := client.PublishEvent(nil)
-	assert.NoError(t, err, "should be error")
+	client.Register(nil)
 }

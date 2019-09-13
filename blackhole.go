@@ -14,21 +14,20 @@
  * limitations under the License.
  */
 
-package eventpublisher
+package eventstream
 
 // BlackholeClient satisfies the publisher for mocking
 type BlackholeClient struct{}
 
 // NewBlackholeClient creates new telemetry client
-func NewBlackholeClient() *BlackholeClient {
-	return &BlackholeClient{}
+func NewBlackholeClient() (*BlackholeClient, error) {
+	return &BlackholeClient{}, nil
 }
 
-func (client *BlackholeClient) PublishEvent(event *Event) error {
+func (client *BlackholeClient) Publish(publishBuilder *PublishBuilder) {
 	// do nothing
-	return nil
 }
 
-func (client *BlackholeClient) PublishEventAsync(event *Event) {
+func (client *BlackholeClient) Register(subscribeBuilder *SubscribeBuilder) {
 	// do nothing
 }
