@@ -17,45 +17,57 @@
 package main
 
 import (
-	"time"
+	"context"
+	"fmt"
 
-	eventpublisher "github.com/AccelByte/eventstream-go-sdk"
+	"github.com/AccelByte/eventstream-go-sdk"
+	"github.com/sirupsen/logrus"
 )
 
 func main() {
-	client := eventpublisher.NewStdoutClient("alpha")
+	prefix := "example"
+	client, err := eventstream.NewStdoutClient(prefix)
+	if err != nil {
+		logrus.Error(err)
+	}
 
-	event := ConstructUserRegistrationEvent(13, 12, 1, "IAM", []string{"70daa46c789640cf8ae0a7a4027ee006"},
-		"a5584584badf42bba5a9954434b27ef4", []string{"a5584584badf42bba5a9954434b27ef4"}, "accelbyte",
-		"accelbyte", "a349286b153f469ca311763ada8d1635", "4b9cbf8f61fb4b7eb60d1591ca7e90a5",
-		true, "topic_name", "test display", "email@example.com", 12)
+	client.Register(
+		eventstream.NewSubscribe().
+			EventName("eventName").
+			Topic("topic").
+			Context(context.Background()).
+			Callback(func(event *eventstream.Event, err error) {
+				if err != nil {
+					logrus.Error(err)
+				}
+				fmt.Printf("%+v", event)
+			}))
 
-	client.PublishEventAsync(event)
+	client.Publish(
+		eventstream.NewPublish().
+			Topic("topic").
+			EventName("eventName").
+			Namespace("namespace").
+			ClientID("clientId").
+			UserID("userId").
+			TraceID("traceId").
+			Version("version").
+			Context(context.Background()).
+			Payload(map[string]interface{}{
+				"payload1": struct {
+					Field1 string
+					Field2 string
+				}{
+					Field1: "value1",
+					Field2: "value2",
+				},
+				"payload2": struct {
+					Field3 string
+					Field4 string
+				}{
+					Field3: "value3",
+					Field4: "value4",
+				},
+			}))
 
-	time.Sleep(time.Second)
-}
-
-func ConstructUserRegistrationEvent(eventID int,
-	eventType int,
-	eventLevel int,
-	service string,
-	clientIDs []string,
-	userID string,
-	targetUserIDs []string,
-	namespace string,
-	targetNamespace string,
-	traceID string,
-	sessionID string,
-	privacy bool,
-	topic string,
-	displayName string,
-	emailAddress string,
-	age int) *eventpublisher.Event {
-
-	return eventpublisher.NewEvent(eventID, eventType, eventLevel, service, clientIDs, userID, targetUserIDs,
-		namespace, targetNamespace, traceID, sessionID, privacy, topic).
-		WithFields(map[string]interface{}{
-			"display_name":  displayName,
-			"email_address": emailAddress,
-			"age":           age})
 }

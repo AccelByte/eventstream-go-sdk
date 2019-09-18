@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package eventpublisher
+package eventstream
 
 import (
 	"encoding/json"
@@ -26,36 +26,61 @@ import (
 
 // StdoutClient satisfies the publisher for mocking
 type StdoutClient struct {
-	realm string
+	prefix string
 }
 
 // NewStdoutClient creates new telemetry client
-func NewStdoutClient(realm string) *StdoutClient {
+func NewStdoutClient(prefix string) (*StdoutClient, error) {
 	return &StdoutClient{
-		realm: realm,
-	}
+		prefix: prefix,
+	}, nil
 }
 
-func (client *StdoutClient) PublishEvent(event *Event) error {
-	if event == nil {
-		return fmt.Errorf("event can't be nil")
+// Publish print event to console
+func (client *StdoutClient) Publish(publishBuilder *PublishBuilder) {
+	if publishBuilder == nil {
+		logrus.Error("unable to publish nil event")
+		return
 	}
-	event.Realm = client.realm
-	event.Time = time.Now().UTC()
+	event := &Event{
+		ID:        generateID(),
+		EventName: publishBuilder.eventName,
+		Namespace: publishBuilder.namespace,
+		ClientID:  publishBuilder.clientID,
+		UserID:    publishBuilder.userID,
+		TraceID:   publishBuilder.traceID,
+		Timestamp: time.Now().UTC().Format(time.RFC3339),
+		Version:   publishBuilder.version,
+		Payload:   publishBuilder.payload,
+	}
 
-	eventByte, err := json.Marshal(event)
+	eventByte, err := marshal(event)
 	if err != nil {
-		return err
+		return
 	}
+
 	fmt.Println(string(eventByte))
-	return nil
 }
 
-func (client *StdoutClient) PublishEventAsync(event *Event) {
-	go func() {
-		err := client.PublishEvent(event)
-		if err != nil {
-			logrus.Error(err)
-		}
-	}()
+// Register print event to console
+func (client *StdoutClient) Register(subscribeBuilder *SubscribeBuilder) {
+	subscribe := struct {
+		Topic     string    `json:"topic"`
+		EventName string    `json:"name"`
+		Timestamp time.Time `json:"timestamp"`
+		Version   string    `json:"version"`
+	}{
+		Topic:     subscribeBuilder.topic,
+		EventName: subscribeBuilder.eventName,
+		Version:   defaultVersion,
+		Timestamp: time.Now().UTC(),
+	}
+
+	eventByte, err := json.Marshal(&subscribe)
+	if err != nil {
+		logrus.Errorf("unable to marshal event : %s , error : %v", subscribe.EventName, err)
+		return
+	}
+
+	fmt.Println(string(eventByte))
 }

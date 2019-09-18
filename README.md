@@ -3,69 +3,108 @@
 # eventstream-go-sdk
 Go SDK for integrating with AccelByte's event stream
 
-## Supported stream
-Currently these stream are supported by this library:
+## Usage
 
-### Kafka stream
-This will publish an event in to Kafka stream. Each event type will be published into different topic by using the topic
-field inside the event. For example, if event has `event.topic=update_user`, it will be pushed to `update_user` Kafka 
-topic.
+### Install
 
-To create a client for publishing to Kafka stream, use this function:
+```
+go get -u github.com/AccelByte/eventstream-go-sdk
+```
+
+### Importing
+
 ```go
-client, err := NewKafkaClient("realm-name", []string{"localhost:9092"})
-``` 
+eventstream "github.com/AccelByte/eventstream-go-sdk"
+```
 
-### stdout stream
+
+## Supported Stream
+Currently event stream are supported by these stream:
+
+### Kafka Stream
+Publish and subscribe an event to / from Kafka stream. 
+
+currently compatible with golang version from 1.12+ and Kafka versions from 0.10.1.0 to 2.1.0.
+
+To create a new Kafka stream client, use this function:
+```go
+client, err := NewKafkaClient(brokers []string, prefix string, config ...*KafkaConfig)
+``` 
+``NewKafkaClient`` requires 3 parameters :
+ * brokers : List of kafka broker (array of string)
+ * prefix : Topic prefix from client (string)
+ * config : Custom kafka configuration from client. 
+ This is optional and only uses the first arguments. (variadic KafkaConfig)   
+
+#### Publish
+Publish or sent an event into kafka stream. Client able to publish an event into single or multiple topic.
+Publish support with exponential backoff retry. (max 3x)
+
+To publish an event, use this function:
+```go
+client.Publish(
+		NewPublish().
+			Topic(TopicName).
+			EventName(EventName).
+			Namespace(Namespace).
+			ClientID(ClientID).
+			UserID(UserID).
+			TraceID(TraceID).
+			Context(Context).
+			Payload(Payload))
+```
+
+#### Subscribe
+To subscribe an event from specific topic, client should be register a callback function that executed once event received.
+A callback function has specific topic and event name.
+
+To subscribe an event, use this function:
+```go
+client.Register(
+		NewSubscribe().
+			Topic(topicName).
+			EventName(mockEvent.EventName).
+			Context(Context).
+			Callback(func(event *Event, err error) {}))
+```
+
+Note: Callback function should be ``func(event *Event, err error){}``. ``event`` is object that store event message 
+and ``err`` is an error that happen when consume the message.
+
+#### Custom Configuration
+SDK support with custom configuration for kafka stream, that is :
+
+* DialTimeout : Timeout duration during connecting to kafka broker (time.Duration)
+* ReadTimeout : Timeout duration during consume topic from kafka broker (time.Duration)
+* WriteTimeout : Timeout duration during publish event to kafka broker (time.Duration) 
+
+### Stdout Stream
 This stream is for testing purpose. This will print the event in stdout. It should not be used in production since this 
 will print unnecessary log.
 
 To create a client for stdout, use this function:
 ```go
-client := NewStdoutClient("realm-name")
+client, err := NewStdoutClient(prefix string)
 ```
 
-### blackhole
-This is used when we don't want the service to send event data to anywhere.
+### Blackhole
+This is used when client don't want the service to send event data to anywhere.
 
 To create a client for stdout, use this function:
 ```go
-client := NewBlackholeClient()
+client, err := NewBlackholeClient()
 ```
 
-## Usage
+## Event Message
+Event message is a set of event information that would be publish or consume by client.
 
-### Importing
-
-```go
-eventpublisher "github.com/AccelByte/eventstream-go-sdk"
-```
-
-### Creating an event
-
-Although the Event is exposed, it's strongly recommended to not creating them by yourself. For that, we can use the 
-`NewEvent()` function to make sure all required fields are not empty. 
-
-To add additional fields, we can use `WithFields()` function. 
-
-It's strongly recommended to create your own event constructor to wrap  the `NewEvent()` and `WithFields()` to force 
-additional fields to be uniform. The example can be read in `/example` folder.
-
-### Publishing an event
-There are two type of event publishing in this library.
-
-#### Synchronous
-This type will publish an event in synchronous manner. The publish function will not return anything until the process
-is done. The function will also return the status of the publishing.
-
-```go
-err := client.PublishEvent(event)
-```
-
-#### Asynchronous
-This type will publish an event in asynchronous manner. The publish function will instantaneously return without having 
-to wait the process. We can't catch the status of this publishing. However, if error occur, it will be logged. 
-
-```go
-client.PublishEventAsync(event)
-```
+Event message format :
+* id : Event ID with UUID format (string)
+* name : Event name (string)
+* namespace : Event namespace (string)
+* traceId : Trace ID (string)
+* clientId : Publisher client ID (string)
+* userId : Publisher user ID (string)
+* timestamp : Event time (time.Time)
+* version : Event schema version (string)
+* payload : Set of data / object that given by producer. Each data have own key for specific purpose. (map[string]interface{})

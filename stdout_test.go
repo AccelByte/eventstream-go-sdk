@@ -14,60 +14,79 @@
  * limitations under the License.
  */
 
-package eventpublisher
+package eventstream
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
 
 func TestNewStdoutClient(t *testing.T) {
-	client := NewStdoutClient("test")
+	client, err := NewStdoutClient("test")
 	expectedClient := &StdoutClient{
-		realm: "test",
+		prefix: "test",
 	}
 	assert.Equal(t, expectedClient, client, "client should be equal")
+	assert.Nil(t, err, "error should be nil")
 }
 
-func TestPublishEventStdoutAsyncSuccess(t *testing.T) {
+func TestStdoutPublish(t *testing.T) {
 	client := StdoutClient{
-		realm: "test",
+		prefix: "test",
 	}
 
-	event := NewEvent(123, 99, 4, "iam", []string{"8dbf8e7f673242b3ad02e7cf1be90792"},
-		"09cb90e74270445d9f85309b23d612a7", []string{"8dbf8e7f673242b3ad02e7cf1be90792"}, "accelbyte",
-		"accelbyte", "4e4e17820f4a4b2aa19a843369033fe4", "cf1884b311e345e0b4a96988ed6b887b",
-		true, "topic_name").
-		WithFields(map[string]interface{}{
-			"age":           12,
-			"email_address": "test@example.com",
-		})
-	client.PublishEventAsync(event)
+	topicName := "topicTest"
+
+	var mockPayload = make(map[string]interface{})
+	mockPayload[testPayload] = Payload{FriendID: "user456"}
+	mockEvent := struct {
+		ID        string      `json:"id"`
+		EventName string      `json:"name"`
+		Namespace string      `json:"namespace"`
+		ClientID  string      `json:"clientId"`
+		TraceID   string      `json:"traceId"`
+		UserID    string      `json:"userId"`
+		Timestamp time.Time   `json:"timestamp"`
+		Version   string      `json:"version"`
+		Payload   interface{} `json:"payload"`
+	}{
+		EventName: "testEvent",
+		Namespace: "event",
+		ClientID:  "client123",
+		TraceID:   "trace123",
+		UserID:    "user123",
+		Version:   "0.1.0",
+		Payload:   mockPayload,
+	}
+
+	client.Publish(
+		NewPublish().
+			Topic(topicName).
+			EventName(mockEvent.EventName).
+			Namespace(mockEvent.Namespace).
+			ClientID(mockEvent.ClientID).
+			UserID(mockEvent.UserID).
+			Payload(mockPayload))
 }
 
-func TestPublishEventStdoutSyncSuccess(t *testing.T) {
+func TestStdoutSubscribe(t *testing.T) {
 	client := StdoutClient{
-		realm: "test",
+		prefix: "test",
 	}
 
-	event := NewEvent(123, 99, 4, "iam", []string{"8dbf8e7f673242b3ad02e7cf1be90792"},
-		"09cb90e74270445d9f85309b23d612a7", []string{"8dbf8e7f673242b3ad02e7cf1be90792"}, "accelbyte",
-		"accelbyte", "4e4e17820f4a4b2aa19a843369033fe4", "cf1884b311e345e0b4a96988ed6b887b",
-		true, "topic_name").
-		WithFields(map[string]interface{}{
-			"age":           12,
-			"email_address": "test@example.com",
-		})
-	err := client.PublishEvent(event)
-	assert.NoError(t, err, "should be no error")
-}
+	topicName := "topicTest"
 
-func TestPublishEventStdoutSyncNil(t *testing.T) {
-	client := StdoutClient{
-		realm: "test",
+	mockEvent := struct {
+		EventName string `json:"name"`
+	}{
+		EventName: "testEvent",
 	}
 
-	err := client.PublishEvent(nil)
-	assert.Error(t, err, "should be error")
+	client.Register(
+		NewSubscribe().
+			Topic(topicName).
+			EventName(mockEvent.EventName).
+			Callback(func(event *Event, err error) {}))
 }

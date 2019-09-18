@@ -1,126 +1,241 @@
-/*
- * Copyright 2019 AccelByte Inc
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright (c) 2019 AccelByte Inc. All Rights Reserved.
+// This is licensed software from AccelByte Inc, for limitations
+// and restrictions contact your company contract manager.
 
-package eventpublisher
+package eventstream
 
 import (
-	"encoding/json"
+	"context"
 	"fmt"
+	"math/rand"
+	"reflect"
 	"testing"
 	"time"
 
-	"github.com/Shopify/sarama"
-	"github.com/Shopify/sarama/mocks"
+	"github.com/mitchellh/mapstructure"
 	"github.com/stretchr/testify/assert"
 )
 
-func TestNewKafkaClientError(t *testing.T) {
-	producerConf := &KafkaConfig{
-		ReadTimeout:          time.Millisecond,
-		DialTimeout:          time.Millisecond,
-		WriteTimeout:         time.Millisecond,
-		MetadataRetryBackoff: time.Millisecond,
-		MetadataRetryMax:     3,
-	}
-	client, err := NewKafkaClient("test", []string{"localhost"}, producerConf, producerConf)
-	assert.Error(t, err)
-	assert.Nil(t, client)
+const (
+	timeoutTest  = 30
+	prefix       = "prefix"
+	testPayload  = "testPayload"
+	errorTimeout = "timeout while executing test"
+)
+
+type Payload struct {
+	FriendID string `json:"friendId"`
 }
 
-func TestNewKafkaClientSuccess(t *testing.T) {
-	client, err := NewKafkaClient("test", []string{"localhost:9092"})
-	assert.NoError(t, err)
-	assert.NotNil(t, client)
+func createKafkaClient(t *testing.T) *KafkaClient {
+	t.Helper()
+
+	brokerList := []string{"localhost:9092"}
+	client, _ := NewKafkaClient(brokerList, prefix)
+	return client
 }
 
-func TestNewKafkaClientSuccessOnlySetAsyncProducerConfig(t *testing.T) {
-	producerConf := &KafkaConfig{
-		ReadTimeout:          time.Second,
-		DialTimeout:          time.Second,
-		WriteTimeout:         time.Second,
-		MetadataRetryBackoff: 250 * time.Millisecond,
-		MetadataRetryMax:     3,
-	}
-	client, err := NewKafkaClient("test", []string{"localhost:9092"}, producerConf)
-	assert.NoError(t, err)
-	assert.NotNil(t, client)
-}
-
-func TestPublishEventKafkaAsyncSuccess(t *testing.T) {
-	config := sarama.NewConfig()
-	config.Producer.Return.Successes = true
-	mockProducer := mocks.NewAsyncProducer(t, config)
-	mockProducer.ExpectInputAndSucceed()
-
-	defer func() {
-		if err := mockProducer.Close(); err != nil {
-			t.Error(err)
+func timeout(t *testing.T, timeout int, timeoutChan chan bool) {
+	t.Helper()
+	timer := time.NewTimer(time.Duration(timeout) * time.Second)
+	go func() {
+	loop:
+		for {
+			select {
+			case <-timer.C:
+				timeoutChan <- true
+				break loop
+			default:
+				break
+			}
 		}
 	}()
-
-	client := KafkaClient{
-		realm:         "test",
-		asyncProducer: mockProducer,
-	}
-
-	event := NewEvent(123, 99, 4, "iam", []string{"8dbf8e7f673242b3ad02e7cf1be90792"},
-		"09cb90e74270445d9f85309b23d612a7", []string{"8dbf8e7f673242b3ad02e7cf1be90792"}, "accelbyte",
-		"accelbyte", "4e4e17820f4a4b2aa19a843369033fe4", "cf1884b311e345e0b4a96988ed6b887b",
-		true, "topic_name").
-		WithFields(map[string]interface{}{
-			"age":           12,
-			"email_address": "test@example.com",
-		})
-
-	client.PublishEventAsync(event)
-	actualEvent := <-mockProducer.Successes()
-
-	actual, _ := actualEvent.Value.Encode()
-	expected, _ := json.Marshal(event)
-
-	assert.Equal(t, string(expected), string(actual), "event in the producer is not equal")
-	assert.Equal(t, actualEvent.Topic, fmt.Sprintf("topic_name"), "topic is not equal")
 }
 
-func TestPublishEventKafkaSynchronousSuccess(t *testing.T) {
-	config := sarama.NewConfig()
-	mockProducer := mocks.NewSyncProducer(t, config)
-	mockProducer.ExpectSendMessageAndSucceed()
+func constructTopicTest() string {
+	rand.Seed(time.Now().UnixNano())
+	return fmt.Sprintf("%s.%d", "testTopic", rand.Intn(100))
+}
 
-	defer func() {
-		if err := mockProducer.Close(); err != nil {
-			t.Error(err)
-		}
-	}()
+// nolint dupl
+func TestKafkaPubSubSuccess(t *testing.T) {
+	timeoutChan := make(chan bool, 1)
+	doneChan := make(chan bool, 1)
+	timeout(t, timeoutTest, timeoutChan)
 
-	client := KafkaClient{
-		realm:        "test",
-		syncProducer: mockProducer,
+	client := createKafkaClient(t)
+
+	topicName := constructTopicTest()
+
+	var mockPayload = make(map[string]interface{})
+	mockPayload[testPayload] = Payload{FriendID: "user456"}
+	mockEvent := struct {
+		ID        string                 `json:"id"`
+		EventName string                 `json:"name"`
+		Namespace string                 `json:"namespace"`
+		ClientID  string                 `json:"clientId"`
+		TraceID   string                 `json:"traceId"`
+		UserID    string                 `json:"userId"`
+		Timestamp time.Time              `json:"timestamp"`
+		Version   string                 `json:"version"`
+		Payload   map[string]interface{} `json:"payload"`
+	}{
+		EventName: "testEvent",
+		Namespace: "event",
+		ClientID:  "client123",
+		TraceID:   "trace123",
+		UserID:    "user123",
+		Version:   defaultVersion,
+		Payload:   mockPayload,
 	}
 
-	event := NewEvent(123, 99, 4, "iam", []string{"8dbf8e7f673242b3ad02e7cf1be90792"},
-		"09cb90e74270445d9f85309b23d612a7", []string{"8dbf8e7f673242b3ad02e7cf1be90792"}, "accelbyte",
-		"accelbyte", "4e4e17820f4a4b2aa19a843369033fe4", "cf1884b311e345e0b4a96988ed6b887b",
-		true, "topic_name").
-		WithFields(map[string]interface{}{
-			"age":           12,
-			"email_address": "test@example.com",
-		})
+	client.Register(
+		NewSubscribe().
+			Topic(topicName).
+			EventName(mockEvent.EventName).
+			Callback(func(event *Event, err error) {
+				var eventPayload Payload
+				if err != nil {
+					assert.Fail(t, "error when run callback")
+				}
+				if err = mapstructure.Decode(event.Payload[testPayload], &eventPayload); err != nil {
+					assert.Fail(t, "unable to decode payload")
+				}
+				assert.Equal(t, mockEvent.EventName, event.EventName, "event name should be equal")
+				assert.Equal(t, mockEvent.Namespace, event.Namespace, "namespace should be equal")
+				assert.Equal(t, mockEvent.ClientID, event.ClientID, "client ID should be equal")
+				assert.Equal(t, mockEvent.TraceID, event.TraceID, "trace ID should be equal")
+				assert.Equal(t, mockEvent.UserID, event.UserID, "user ID should be equal")
+				assert.Equal(t, mockEvent.Version, event.Version, "version should be equal")
+				if validPayload := reflect.DeepEqual(mockEvent.Payload[testPayload].(Payload), eventPayload); !validPayload {
+					assert.Fail(t, "payload should be equal")
+				}
+				doneChan <- true
+			}))
 
-	err := client.PublishEvent(event)
+	client.Publish(
+		NewPublish().
+			Topic(topicName).
+			EventName(mockEvent.EventName).
+			Namespace(mockEvent.Namespace).
+			ClientID(mockEvent.ClientID).
+			UserID(mockEvent.UserID).
+			TraceID(mockEvent.TraceID).
+			Context(context.Background()).
+			Payload(mockPayload))
 
-	assert.NoError(t, err, "error should be nil")
+	for {
+		select {
+		case <-doneChan:
+			return
+		case <-timeoutChan:
+			assert.FailNow(t, errorTimeout)
+		}
+	}
+}
+
+// nolint dupl
+func TestKafkaPubSubMultipleTopicSuccess(t *testing.T) {
+	timeoutChan := make(chan bool, 1)
+	doneChan := make(chan bool, 2)
+	timeout(t, timeoutTest, timeoutChan)
+
+	client := createKafkaClient(t)
+
+	topicName1, topicName2 := constructTopicTest(), constructTopicTest()
+
+	var mockPayload = make(map[string]interface{})
+	mockPayload[testPayload] = Payload{FriendID: "user456"}
+	mockEvent := struct {
+		ID        string                 `json:"id"`
+		EventName string                 `json:"name"`
+		Namespace string                 `json:"namespace"`
+		ClientID  string                 `json:"clientId"`
+		UserID    string                 `json:"userId"`
+		TraceID   string                 `json:"traceId"`
+		Timestamp time.Time              `json:"timestamp"`
+		Version   string                 `json:"version"`
+		Payload   map[string]interface{} `json:"payload"`
+	}{
+		EventName: "testEvent",
+		Namespace: "event",
+		ClientID:  "client123",
+		TraceID:   "trace123",
+		UserID:    "user123",
+		Version:   "0.2.0",
+		Payload:   mockPayload,
+	}
+
+	client.Register(
+		NewSubscribe().
+			Topic(topicName1).
+			EventName(mockEvent.EventName).
+			Callback(func(event *Event, err error) {
+				var eventPayload Payload
+				if err != nil {
+					assert.Fail(t, "error when run callback 1")
+				}
+				if err = mapstructure.Decode(event.Payload[testPayload], &eventPayload); err != nil {
+					assert.Fail(t, "unable to decode payload")
+				}
+				assert.Equal(t, mockEvent.EventName, event.EventName, "event name should be equal")
+				assert.Equal(t, mockEvent.Namespace, event.Namespace, "namespace should be equal")
+				assert.Equal(t, mockEvent.ClientID, event.ClientID, "client ID should be equal")
+				assert.Equal(t, mockEvent.TraceID, event.TraceID, "trace ID should be equal")
+				assert.Equal(t, mockEvent.UserID, event.UserID, "user ID should be equal")
+				assert.Equal(t, mockEvent.Version, event.Version, "version should be equal")
+				if validPayload := reflect.DeepEqual(mockEvent.Payload[testPayload].(Payload), eventPayload); !validPayload {
+					assert.Fail(t, "payload should be equal")
+				}
+				doneChan <- true
+			}))
+
+	client.Register(
+		NewSubscribe().
+			Topic(topicName2).
+			EventName(mockEvent.EventName).
+			Callback(func(event *Event, err error) {
+				var eventPayload Payload
+				if err != nil {
+					assert.Fail(t, "error when run callback 2")
+				}
+				if err = mapstructure.Decode(event.Payload[testPayload], &eventPayload); err != nil {
+					assert.Fail(t, "unable to decode payload")
+				}
+				assert.Equal(t, mockEvent.EventName, event.EventName, "event name should be equal")
+				assert.Equal(t, mockEvent.Namespace, event.Namespace, "namespace should be equal")
+				assert.Equal(t, mockEvent.ClientID, event.ClientID, "client ID should be equal")
+				assert.Equal(t, mockEvent.TraceID, event.TraceID, "trace ID should be equal")
+				assert.Equal(t, mockEvent.UserID, event.UserID, "user ID should be equal")
+				assert.Equal(t, mockEvent.Version, event.Version, "version should be equal")
+				if validPayload := reflect.DeepEqual(mockEvent.Payload[testPayload].(Payload), eventPayload); !validPayload {
+					assert.Fail(t, "payload should be equal")
+				}
+				doneChan <- true
+			}))
+
+	client.Publish(
+		NewPublish().
+			Topic(topicName1, topicName2).
+			EventName(mockEvent.EventName).
+			Namespace(mockEvent.Namespace).
+			ClientID(mockEvent.ClientID).
+			UserID(mockEvent.UserID).
+			TraceID(mockEvent.TraceID).
+			Version("0.2.0").
+			Context(context.Background()).
+			Payload(mockPayload))
+
+	doneItr := 0
+	for {
+		select {
+		case <-doneChan:
+			doneItr++
+			if doneItr == 2 {
+				return
+			}
+		case <-timeoutChan:
+			assert.FailNow(t, errorTimeout)
+		}
+	}
 }
