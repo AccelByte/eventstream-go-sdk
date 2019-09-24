@@ -6,236 +6,209 @@ package eventstream
 
 import (
 	"context"
-	"fmt"
-	"math/rand"
-	"reflect"
 	"testing"
-	"time"
 
-	"github.com/mitchellh/mapstructure"
 	"github.com/stretchr/testify/assert"
 )
 
-const (
-	timeoutTest  = 30
-	prefix       = "prefix"
-	testPayload  = "testPayload"
-	errorTimeout = "timeout while executing test"
-)
+// nolint dupl
+func TestKafkaPubWithNilEvent(t *testing.T) {
+	client := createKafkaClient(t)
 
-type Payload struct {
-	FriendID string `json:"friendId"`
-}
-
-func createKafkaClient(t *testing.T) *KafkaClient {
-	t.Helper()
-
-	brokerList := []string{"localhost:9092"}
-	client, _ := NewKafkaClient(brokerList, prefix)
-	return client
-}
-
-func timeout(t *testing.T, timeout int, timeoutChan chan bool) {
-	t.Helper()
-	timer := time.NewTimer(time.Duration(timeout) * time.Second)
-	go func() {
-	loop:
-		for {
-			select {
-			case <-timer.C:
-				timeoutChan <- true
-				break loop
-			default:
-				break
-			}
-		}
-	}()
-}
-
-func constructTopicTest() string {
-	rand.Seed(time.Now().UnixNano())
-	return fmt.Sprintf("%s.%d", "testTopic", rand.Intn(100))
+	err := client.Publish(nil)
+	assert.Equal(t, err, errPubNilEvent, "error should be equal")
 }
 
 // nolint dupl
-func TestKafkaPubSubSuccess(t *testing.T) {
-	timeoutChan := make(chan bool, 1)
-	doneChan := make(chan bool, 1)
-	timeout(t, timeoutTest, timeoutChan)
-
+func TestKafkaSubWithNilEvent(t *testing.T) {
 	client := createKafkaClient(t)
 
-	topicName := constructTopicTest()
-
-	var mockPayload = make(map[string]interface{})
-	mockPayload[testPayload] = Payload{FriendID: "user456"}
-	mockEvent := struct {
-		ID        string                 `json:"id"`
-		EventName string                 `json:"name"`
-		Namespace string                 `json:"namespace"`
-		ClientID  string                 `json:"clientId"`
-		TraceID   string                 `json:"traceId"`
-		UserID    string                 `json:"userId"`
-		Timestamp time.Time              `json:"timestamp"`
-		Version   string                 `json:"version"`
-		Payload   map[string]interface{} `json:"payload"`
-	}{
-		EventName: "testEvent",
-		Namespace: "event",
-		ClientID:  "client123",
-		TraceID:   "trace123",
-		UserID:    "user123",
-		Version:   defaultVersion,
-		Payload:   mockPayload,
-	}
-
-	client.Register(
-		NewSubscribe().
-			Topic(topicName).
-			EventName(mockEvent.EventName).
-			Callback(func(event *Event, err error) {
-				var eventPayload Payload
-				if err != nil {
-					assert.Fail(t, "error when run callback")
-				}
-				if err = mapstructure.Decode(event.Payload[testPayload], &eventPayload); err != nil {
-					assert.Fail(t, "unable to decode payload")
-				}
-				assert.Equal(t, mockEvent.EventName, event.EventName, "event name should be equal")
-				assert.Equal(t, mockEvent.Namespace, event.Namespace, "namespace should be equal")
-				assert.Equal(t, mockEvent.ClientID, event.ClientID, "client ID should be equal")
-				assert.Equal(t, mockEvent.TraceID, event.TraceID, "trace ID should be equal")
-				assert.Equal(t, mockEvent.UserID, event.UserID, "user ID should be equal")
-				assert.Equal(t, mockEvent.Version, event.Version, "version should be equal")
-				if validPayload := reflect.DeepEqual(mockEvent.Payload[testPayload].(Payload), eventPayload); !validPayload {
-					assert.Fail(t, "payload should be equal")
-				}
-				doneChan <- true
-			}))
-
-	client.Publish(
-		NewPublish().
-			Topic(topicName).
-			EventName(mockEvent.EventName).
-			Namespace(mockEvent.Namespace).
-			ClientID(mockEvent.ClientID).
-			UserID(mockEvent.UserID).
-			TraceID(mockEvent.TraceID).
-			Context(context.Background()).
-			Payload(mockPayload))
-
-	for {
-		select {
-		case <-doneChan:
-			return
-		case <-timeoutChan:
-			assert.FailNow(t, errorTimeout)
-		}
-	}
+	err := client.Register(nil)
+	assert.Equal(t, err, errSubNilEvent, "error should be equal")
 }
 
 // nolint dupl
-func TestKafkaPubSubMultipleTopicSuccess(t *testing.T) {
-	timeoutChan := make(chan bool, 1)
-	doneChan := make(chan bool, 2)
-	timeout(t, timeoutTest, timeoutChan)
-
+func TestKafkaPubWithEmptyTopic(t *testing.T) {
 	client := createKafkaClient(t)
-
-	topicName1, topicName2 := constructTopicTest(), constructTopicTest()
 
 	var mockPayload = make(map[string]interface{})
 	mockPayload[testPayload] = Payload{FriendID: "user456"}
-	mockEvent := struct {
-		ID        string                 `json:"id"`
-		EventName string                 `json:"name"`
-		Namespace string                 `json:"namespace"`
-		ClientID  string                 `json:"clientId"`
-		UserID    string                 `json:"userId"`
-		TraceID   string                 `json:"traceId"`
-		Timestamp time.Time              `json:"timestamp"`
-		Version   string                 `json:"version"`
-		Payload   map[string]interface{} `json:"payload"`
-	}{
+	mockEvent := &Event{
 		EventName: "testEvent",
 		Namespace: "event",
-		ClientID:  "client123",
-		TraceID:   "trace123",
-		UserID:    "user123",
+		ClientID:  "661a4ac82b854f3ca3ac2e0377d356e4",
+		TraceID:   "1e801bd0eb6946b88f4556d3c4c91e0c",
+		UserID:    "1fe7f425a0e049d29d87ca3d32e45b5a",
 		Version:   "0.2.0",
 		Payload:   mockPayload,
 	}
 
-	client.Register(
-		NewSubscribe().
-			Topic(topicName1).
-			EventName(mockEvent.EventName).
-			Callback(func(event *Event, err error) {
-				var eventPayload Payload
-				if err != nil {
-					assert.Fail(t, "error when run callback 1")
-				}
-				if err = mapstructure.Decode(event.Payload[testPayload], &eventPayload); err != nil {
-					assert.Fail(t, "unable to decode payload")
-				}
-				assert.Equal(t, mockEvent.EventName, event.EventName, "event name should be equal")
-				assert.Equal(t, mockEvent.Namespace, event.Namespace, "namespace should be equal")
-				assert.Equal(t, mockEvent.ClientID, event.ClientID, "client ID should be equal")
-				assert.Equal(t, mockEvent.TraceID, event.TraceID, "trace ID should be equal")
-				assert.Equal(t, mockEvent.UserID, event.UserID, "user ID should be equal")
-				assert.Equal(t, mockEvent.Version, event.Version, "version should be equal")
-				if validPayload := reflect.DeepEqual(mockEvent.Payload[testPayload].(Payload), eventPayload); !validPayload {
-					assert.Fail(t, "payload should be equal")
-				}
-				doneChan <- true
-			}))
-
-	client.Register(
-		NewSubscribe().
-			Topic(topicName2).
-			EventName(mockEvent.EventName).
-			Callback(func(event *Event, err error) {
-				var eventPayload Payload
-				if err != nil {
-					assert.Fail(t, "error when run callback 2")
-				}
-				if err = mapstructure.Decode(event.Payload[testPayload], &eventPayload); err != nil {
-					assert.Fail(t, "unable to decode payload")
-				}
-				assert.Equal(t, mockEvent.EventName, event.EventName, "event name should be equal")
-				assert.Equal(t, mockEvent.Namespace, event.Namespace, "namespace should be equal")
-				assert.Equal(t, mockEvent.ClientID, event.ClientID, "client ID should be equal")
-				assert.Equal(t, mockEvent.TraceID, event.TraceID, "trace ID should be equal")
-				assert.Equal(t, mockEvent.UserID, event.UserID, "user ID should be equal")
-				assert.Equal(t, mockEvent.Version, event.Version, "version should be equal")
-				if validPayload := reflect.DeepEqual(mockEvent.Payload[testPayload].(Payload), eventPayload); !validPayload {
-					assert.Fail(t, "payload should be equal")
-				}
-				doneChan <- true
-			}))
-
-	client.Publish(
+	err := client.Publish(
 		NewPublish().
-			Topic(topicName1, topicName2).
 			EventName(mockEvent.EventName).
 			Namespace(mockEvent.Namespace).
 			ClientID(mockEvent.ClientID).
 			UserID(mockEvent.UserID).
+			SessionID(mockEvent.SessionID).
 			TraceID(mockEvent.TraceID).
 			Version("0.2.0").
 			Context(context.Background()).
 			Payload(mockPayload))
 
-	doneItr := 0
-	for {
-		select {
-		case <-doneChan:
-			doneItr++
-			if doneItr == 2 {
-				return
-			}
-		case <-timeoutChan:
-			assert.FailNow(t, errorTimeout)
-		}
+	assert.NotNil(t, err, "error should not be nil")
+}
+
+// nolint dupl
+func TestKafkaPubInvalidEventStruct(t *testing.T) {
+	client := createKafkaClient(t)
+	topicName := constructTopicTest()
+
+	var mockPayload = make(map[string]interface{})
+	mockPayload[testPayload] = Payload{FriendID: "user456"}
+	mockEvent := &Event{
+		EventName: "testEvent,.,.",
+		Namespace: "event#$%",
+		ClientID:  "661a4ac82b854f3ca3ac2e0377d356e4",
+		TraceID:   "1e801bd0eb6946b88f4556d3c4c91e0c",
+		UserID:    "1fe7f425a0e049d29d87ca3d32e45b5a",
+		Version:   "0.2.0",
+		Payload:   mockPayload,
 	}
+
+	err := client.Publish(
+		NewPublish().
+			Topic(topicName).
+			EventName(mockEvent.EventName).
+			Namespace(mockEvent.Namespace).
+			ClientID(mockEvent.ClientID).
+			UserID(mockEvent.UserID).
+			SessionID(mockEvent.SessionID).
+			TraceID(mockEvent.TraceID).
+			Version("0.2.0").
+			Context(context.Background()).
+			Payload(mockPayload))
+
+	assert.Equal(t, errInvalidPubStruct, err, "error should be equal")
+}
+
+// nolint dupl
+func TestKafkaPubInvalidUserID(t *testing.T) {
+	client := createKafkaClient(t)
+	topicName := constructTopicTest()
+
+	var mockPayload = make(map[string]interface{})
+	mockPayload[testPayload] = Payload{FriendID: "user456"}
+	mockEvent := &Event{
+		EventName: "testEvent",
+		Namespace: "event",
+		ClientID:  "691768fad8a443cd89aa73132ef47834",
+		TraceID:   "c9bb37252d7246fab229ebd7d5d688ec",
+		UserID:    "user123",
+		Version:   "0.2.0",
+		Payload:   mockPayload,
+	}
+
+	err := client.Publish(
+		NewPublish().
+			Topic(topicName).
+			EventName(mockEvent.EventName).
+			Namespace(mockEvent.Namespace).
+			ClientID(mockEvent.ClientID).
+			UserID(mockEvent.UserID).
+			SessionID(mockEvent.SessionID).
+			TraceID(mockEvent.TraceID).
+			Version("0.2.0").
+			Context(context.Background()).
+			Payload(mockPayload))
+
+	assert.Equal(t, errInvalidUserID, err, "error should be equal")
+}
+
+// nolint dupl
+func TestKafkaPubInvalidClientID(t *testing.T) {
+	client := createKafkaClient(t)
+	topicName := constructTopicTest()
+
+	var mockPayload = make(map[string]interface{})
+	mockPayload[testPayload] = Payload{FriendID: "user456"}
+	mockEvent := &Event{
+		EventName: "testEvent",
+		Namespace: "event",
+		ClientID:  "client123",
+		TraceID:   "5005e27d01064f23b962e8fd2e560a8a",
+		UserID:    "661a4ac82b854f3ca3ac2e0377d356e4",
+		Version:   "0.2.0",
+		Payload:   mockPayload,
+	}
+
+	err := client.Publish(
+		NewPublish().
+			Topic(topicName).
+			EventName(mockEvent.EventName).
+			Namespace(mockEvent.Namespace).
+			ClientID(mockEvent.ClientID).
+			UserID(mockEvent.UserID).
+			SessionID(mockEvent.SessionID).
+			TraceID(mockEvent.TraceID).
+			Version("0.2.0").
+			Context(context.Background()).
+			Payload(mockPayload))
+
+	assert.Equal(t, errInvalidClientID, err, "error should be equal")
+}
+
+// nolint dupl
+func TestKafkaSubWithEmptyTopic(t *testing.T) {
+	client := createKafkaClient(t)
+
+	mockEvent := &Event{
+		EventName: "testEvent,.,.",
+	}
+
+	err := client.Register(
+		NewSubscribe().
+			EventName(mockEvent.EventName).
+			Callback(func(event *Event, err error) {
+
+			}))
+
+	assert.Equal(t, errInvalidSubStruct, err, "error should be equal")
+}
+
+// nolint dupl
+func TestKafkaSubInvalidEventStruct(t *testing.T) {
+	client := createKafkaClient(t)
+	topicName := constructTopicTest()
+
+	mockEvent := &Event{
+		EventName: "testEvent,.,.",
+	}
+
+	err := client.Register(
+		NewSubscribe().
+			Topic(topicName).
+			EventName(mockEvent.EventName).
+			Callback(func(event *Event, err error) {
+
+			}))
+
+	assert.Equal(t, errInvalidSubStruct, err, "error should be equal")
+}
+
+// nolint dupl
+func TestKafkaSubNilCallback(t *testing.T) {
+	client := createKafkaClient(t)
+	topicName := constructTopicTest()
+
+	mockEvent := &Event{
+		EventName: "testEvent",
+	}
+
+	err := client.Register(
+		NewSubscribe().
+			Topic(topicName).
+			EventName(mockEvent.EventName).
+			Callback(nil))
+
+	assert.Equal(t, errInvalidCallback, err, "error should be equal")
 }

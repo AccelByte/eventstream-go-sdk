@@ -26,12 +26,12 @@ import (
 
 func main() {
 	prefix := "example"
-	client, err := eventstream.NewStdoutClient(prefix)
+	client, err := eventstream.NewClient(prefix, "stdout", nil)
 	if err != nil {
 		logrus.Error(err)
 	}
 
-	client.Register(
+	err = client.Register(
 		eventstream.NewSubscribe().
 			EventName("eventName").
 			Topic("topic").
@@ -43,14 +43,19 @@ func main() {
 				fmt.Printf("%+v", event)
 			}))
 
-	client.Publish(
+	if err != nil {
+		logrus.Error(err)
+	}
+
+	err = client.Publish(
 		eventstream.NewPublish().
 			Topic("topic").
 			EventName("eventName").
 			Namespace("namespace").
-			ClientID("clientId").
-			UserID("userId").
-			TraceID("traceId").
+			ClientID("682af5a46e934a42b798bb4afb9a973e").
+			UserID("e635e94c2afb408c9427f143b293a3c7").
+			SessionID("9428c3dd028849cf84c1a763e1b7ea71").
+			TraceID("f75368ef5603402ca98af501304949c0").
 			Version("version").
 			Context(context.Background()).
 			Payload(map[string]interface{}{
@@ -70,4 +75,7 @@ func main() {
 				},
 			}))
 
+	if err != nil {
+		logrus.Error(err)
+	}
 }

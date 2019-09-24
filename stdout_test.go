@@ -24,12 +24,11 @@ import (
 )
 
 func TestNewStdoutClient(t *testing.T) {
-	client, err := NewStdoutClient("test")
+	client := newStdoutClient("test")
 	expectedClient := &StdoutClient{
 		prefix: "test",
 	}
 	assert.Equal(t, expectedClient, client, "client should be equal")
-	assert.Nil(t, err, "error should be nil")
 }
 
 func TestStdoutPublish(t *testing.T) {
@@ -61,7 +60,7 @@ func TestStdoutPublish(t *testing.T) {
 		Payload:   mockPayload,
 	}
 
-	client.Publish(
+	_ = client.Publish(
 		NewPublish().
 			Topic(topicName).
 			EventName(mockEvent.EventName).
@@ -84,7 +83,7 @@ func TestStdoutSubscribe(t *testing.T) {
 		EventName: "testEvent",
 	}
 
-	client.Register(
+	_ = client.Register(
 		NewSubscribe().
 			Topic(topicName).
 			EventName(mockEvent.EventName).
