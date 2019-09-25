@@ -19,6 +19,7 @@ package eventstream
 import (
 	"context"
 	"errors"
+	"time"
 )
 
 const (
@@ -30,6 +31,7 @@ const (
 const (
 	separator      = "."
 	defaultVersion = "0.1.0"
+	defaultGroupID = "*"
 )
 
 // Event defines the structure of event
@@ -40,9 +42,17 @@ type Event struct {
 	ClientID  string                 `json:"clientId"`
 	TraceID   string                 `json:"traceId"`
 	UserID    string                 `json:"userId"`
+	SessionID string                 `json:"sessionId"`
 	Timestamp string                 `json:"timestamp"`
 	Version   string                 `json:"version"`
 	Payload   map[string]interface{} `json:"payload"`
+}
+
+// BrokerConfig is custom configuration for message broker
+type BrokerConfig struct {
+	DialTimeout  time.Duration
+	ReadTimeout  time.Duration
+	WriteTimeout time.Duration
 }
 
 // PublishBuilder defines the structure of message which is sent through message broker
@@ -53,6 +63,7 @@ type PublishBuilder struct {
 	clientID  string
 	traceID   string
 	userID    string
+	sessionID string
 	version   string
 	payload   map[string]interface{}
 	ctx       context.Context
@@ -84,12 +95,6 @@ func (p *PublishBuilder) Namespace(namespace string) *PublishBuilder {
 	return p
 }
 
-// UserID set userID of publisher event
-func (p *PublishBuilder) UserID(userID string) *PublishBuilder {
-	p.userID = userID
-	return p
-}
-
 // ClientID set clientID of publisher event
 func (p *PublishBuilder) ClientID(clientID string) *PublishBuilder {
 	p.clientID = clientID
@@ -99,6 +104,18 @@ func (p *PublishBuilder) ClientID(clientID string) *PublishBuilder {
 // TraceID set traceID of publisher event
 func (p *PublishBuilder) TraceID(traceID string) *PublishBuilder {
 	p.traceID = traceID
+	return p
+}
+
+// SessionID set sessionID of publisher event
+func (p *PublishBuilder) SessionID(sessionID string) *PublishBuilder {
+	p.sessionID = sessionID
+	return p
+}
+
+// UserID set userID of publisher event
+func (p *PublishBuilder) UserID(userID string) *PublishBuilder {
+	p.userID = userID
 	return p
 }
 
@@ -124,6 +141,7 @@ func (p *PublishBuilder) Context(ctx context.Context) *PublishBuilder {
 // SubscribeBuilder defines the structure of message which is sent through message broker
 type SubscribeBuilder struct {
 	topic     string
+	groupID   string
 	callback  func(event *Event, err error)
 	eventName string
 	ctx       context.Context
@@ -139,6 +157,12 @@ func NewSubscribe() *SubscribeBuilder {
 // Topic set topic that will be subscribe
 func (s *SubscribeBuilder) Topic(topic string) *SubscribeBuilder {
 	s.topic = topic
+	return s
+}
+
+// GroupID set subscriber groupID or queue group name
+func (s *SubscribeBuilder) GroupID(groupID string) *SubscribeBuilder {
+	s.groupID = groupID
 	return s
 }
 
@@ -161,14 +185,14 @@ func (s *SubscribeBuilder) Context(ctx context.Context) *SubscribeBuilder {
 	return s
 }
 
-func NewClient(prefix, stream string, brokers []string) (Client, error) {
+func NewClient(prefix, stream string, brokers []string, config ...*BrokerConfig) (Client, error) {
 	switch stream {
 	case eventStreamNull:
-		return NewBlackholeClient()
+		return newBlackholeClient(), nil
 	case eventStreamStdout:
-		return NewStdoutClient(prefix)
+		return newStdoutClient(prefix), nil
 	case eventStreamKafka:
-		return NewKafkaClient(brokers, prefix)
+		return newKafkaClient(brokers, prefix, config...), nil
 	default:
 		return nil, errors.New("unsupported stream")
 	}
@@ -176,6 +200,6 @@ func NewClient(prefix, stream string, brokers []string) (Client, error) {
 
 // Client is an interface for event stream functionality
 type Client interface {
-	Publish(publishBuilder *PublishBuilder)
-	Register(subscribeBuilder *SubscribeBuilder)
+	Publish(publishBuilder *PublishBuilder) error
+	Register(subscribeBuilder *SubscribeBuilder) error
 }

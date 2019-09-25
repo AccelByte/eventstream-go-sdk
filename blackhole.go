@@ -19,15 +19,17 @@ package eventstream
 // BlackholeClient satisfies the publisher for mocking
 type BlackholeClient struct{}
 
-// NewBlackholeClient creates new telemetry client
-func NewBlackholeClient() (*BlackholeClient, error) {
-	return &BlackholeClient{}, nil
+// newBlackholeClient creates new telemetry client
+func newBlackholeClient() *BlackholeClient {
+	return &BlackholeClient{}
 }
 
-func (client *BlackholeClient) Publish(publishBuilder *PublishBuilder) {
+func (client *BlackholeClient) Publish(publishBuilder *PublishBuilder) error {
 	// do nothing
+	return nil
 }
 
-func (client *BlackholeClient) Register(subscribeBuilder *SubscribeBuilder) {
+func (client *BlackholeClient) Register(subscribeBuilder *SubscribeBuilder) error {
 	// do nothing
+	return nil
 }

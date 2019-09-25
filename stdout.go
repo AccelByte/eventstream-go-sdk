@@ -18,6 +18,7 @@ package eventstream
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -29,18 +30,17 @@ type StdoutClient struct {
 	prefix string
 }
 
-// NewStdoutClient creates new telemetry client
-func NewStdoutClient(prefix string) (*StdoutClient, error) {
+// newStdoutClient creates new telemetry client
+func newStdoutClient(prefix string) *StdoutClient {
 	return &StdoutClient{
 		prefix: prefix,
-	}, nil
+	}
 }
 
 // Publish print event to console
-func (client *StdoutClient) Publish(publishBuilder *PublishBuilder) {
+func (client *StdoutClient) Publish(publishBuilder *PublishBuilder) error {
 	if publishBuilder == nil {
-		logrus.Error("unable to publish nil event")
-		return
+		return errors.New("unable to publish nil event")
 	}
 	event := &Event{
 		ID:        generateID(),
@@ -56,14 +56,15 @@ func (client *StdoutClient) Publish(publishBuilder *PublishBuilder) {
 
 	eventByte, err := marshal(event)
 	if err != nil {
-		return
+		return err
 	}
 
 	fmt.Println(string(eventByte))
+	return nil
 }
 
 // Register print event to console
-func (client *StdoutClient) Register(subscribeBuilder *SubscribeBuilder) {
+func (client *StdoutClient) Register(subscribeBuilder *SubscribeBuilder) error {
 	subscribe := struct {
 		Topic     string    `json:"topic"`
 		EventName string    `json:"name"`
@@ -79,8 +80,9 @@ func (client *StdoutClient) Register(subscribeBuilder *SubscribeBuilder) {
 	eventByte, err := json.Marshal(&subscribe)
 	if err != nil {
 		logrus.Errorf("unable to marshal event : %s , error : %v", subscribe.EventName, err)
-		return
+		return err
 	}
 
 	fmt.Println(string(eventByte))
+	return nil
 }

@@ -32,6 +32,15 @@ func constructTopic(prefix, topic string) string {
 	return topic
 }
 
+// constructGroupID construct groupID or queue group name
+func constructGroupID(groupID string) string {
+	if groupID == "" {
+		groupID = defaultGroupID
+	}
+
+	return groupID
+}
+
 // generateID returns UUID without dash
 func generateID() string {
 	id := uuid.New()

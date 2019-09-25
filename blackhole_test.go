@@ -23,18 +23,17 @@ import (
 )
 
 func TestNewBlackholeClient(t *testing.T) {
-	client, err := NewBlackholeClient()
+	client := newBlackholeClient()
 	expectedClient := &BlackholeClient{}
 	assert.Equal(t, expectedClient, client, "client should be equal")
-	assert.Nil(t, err, "error should be nil")
 }
 
 func TestBlackholePublish(t *testing.T) {
 	client := &BlackholeClient{}
-	client.Publish(nil)
+	_ = client.Publish(nil)
 }
 
 func TestBlackholeSubscribe(t *testing.T) {
 	client := &BlackholeClient{}
-	client.Register(nil)
+	_ = client.Register(nil)
 }

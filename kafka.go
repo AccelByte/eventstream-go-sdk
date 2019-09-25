@@ -34,6 +34,11 @@ const (
 	maxBackOffCount   = 3
 )
 
+var (
+	errPubNilEvent = errors.New("unable to publish nil event")
+	errSubNilEvent = errors.New("unable to subscribe nil event")
+)
+
 // KafkaClient wraps client's functionality for Kafka
 type KafkaClient struct {
 
@@ -50,14 +55,7 @@ type KafkaClient struct {
 	subscribeMap *sync.Map
 }
 
-// KafkaConfig is Kafka configuration to wait dial connection, read and write process
-type KafkaConfig struct {
-	DialTimeout  time.Duration
-	ReadTimeout  time.Duration
-	WriteTimeout time.Duration
-}
-
-func setConfig(writerConfig *kafka.WriterConfig, readerConfig *kafka.ReaderConfig, config *KafkaConfig) {
+func setConfig(writerConfig *kafka.WriterConfig, readerConfig *kafka.ReaderConfig, config *BrokerConfig) {
 
 	if config.ReadTimeout != 0 {
 		writerConfig.ReadTimeout = config.WriteTimeout
@@ -74,8 +72,8 @@ func setConfig(writerConfig *kafka.WriterConfig, readerConfig *kafka.ReaderConfi
 	}
 }
 
-// NewKafkaClient create a new instance of KafkaClient
-func NewKafkaClient(brokers []string, prefix string, config ...*KafkaConfig) (*KafkaClient, error) {
+// newKafkaClient create a new instance of KafkaClient
+func newKafkaClient(brokers []string, prefix string, config ...*BrokerConfig) *KafkaClient {
 
 	logrus.Debug("create new kafka client")
 
@@ -100,21 +98,24 @@ func NewKafkaClient(brokers []string, prefix string, config ...*KafkaConfig) (*K
 		publishConfig:   *writerConfig,
 		subscribeConfig: *readerConfig,
 		subscribeMap:    &sync.Map{},
-	}, nil
+	}
 }
 
 // Publish send event to single or multiple topic with exponential backoff retry
-func (client *KafkaClient) Publish(publishBuilder *PublishBuilder) {
+func (client *KafkaClient) Publish(publishBuilder *PublishBuilder) error {
+	if publishBuilder == nil {
+		return errPubNilEvent
+	}
 	logrus.Debugf("publish event %s into topic %s", publishBuilder.eventName, publishBuilder.topic)
 
-	if publishBuilder == nil {
-		logrus.Error("unable to publish nil event")
-		return
+	err := validatePublishEvent(publishBuilder)
+	if err != nil {
+		return err
 	}
+
 	message, err := constructEvent(publishBuilder)
 	if err != nil {
-		logrus.Errorf("unable to construct event : %s , error : %v", publishBuilder.eventName, err)
-		return
+		return fmt.Errorf("unable to construct event : %s , error : %v", publishBuilder.eventName, err)
 	}
 
 	config := client.publishConfig
@@ -124,7 +125,7 @@ func (client *KafkaClient) Publish(publishBuilder *PublishBuilder) {
 			err = backoff.RetryNotify(func() error {
 				return client.publishEvent(publishBuilder.ctx, topic, config, message)
 			}, backoff.WithMaxRetries(backoff.NewExponentialBackOff(), maxBackOffCount),
-				func(_ error, _ time.Duration) {
+				func(err error, _ time.Duration) {
 					logrus.Debugf("retrying publish event: error %v : ", err)
 				})
 			if err != nil {
@@ -133,6 +134,7 @@ func (client *KafkaClient) Publish(publishBuilder *PublishBuilder) {
 			}
 		}()
 	}
+	return nil
 }
 
 // Publish send event to a topic
@@ -148,6 +150,7 @@ func (client *KafkaClient) publishEvent(ctx context.Context, topic string, confi
 
 	err := writer.WriteMessages(ctx, message)
 	if err != nil {
+		logrus.Errorf("unable to publish event to kafka. topic : %s , error : %v", topicName, err)
 		return fmt.Errorf("unable to publish event to kafka. topic : %s , error : %v", topicName, err)
 	}
 	return nil
@@ -163,6 +166,7 @@ func constructEvent(publishBuilder *PublishBuilder) (kafka.Message, error) {
 		ClientID:  publishBuilder.clientID,
 		UserID:    publishBuilder.userID,
 		TraceID:   publishBuilder.traceID,
+		SessionID: publishBuilder.sessionID,
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
 		Version:   publishBuilder.version,
 		Payload:   publishBuilder.payload,
@@ -182,16 +186,21 @@ func constructEvent(publishBuilder *PublishBuilder) (kafka.Message, error) {
 }
 
 // Register register callback function and then subscribe topic
-func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) {
+func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
+	if subscribeBuilder == nil {
+		return errSubNilEvent
+	}
 	logrus.Debugf("register callback to consume topic %s , event : %s", subscribeBuilder.topic,
 		subscribeBuilder.eventName)
 
-	if subscribeBuilder == nil {
-		logrus.Error("unable to subscribe nil event")
-		return
+	err := validateSubscribeEvent(subscribeBuilder)
+	if err != nil {
+		return err
 	}
+
 	go func() {
 		topic := constructTopic(client.prefix, subscribeBuilder.topic)
+		groupID := constructGroupID(subscribeBuilder.groupID)
 		isRegistered, err := client.registerCallback(topic, subscribeBuilder.eventName, subscribeBuilder.callback)
 		if err != nil {
 			logrus.Errorf("unable to register callback. error : %v", err)
@@ -199,22 +208,18 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) {
 		}
 
 		if isRegistered {
-			logrus.Warnf("topic and event already registered. topic ; %s , event : %s", subscribeBuilder.topic,
+			logrus.Warnf("topic and event already registered. topic : %s , event : %s", subscribeBuilder.topic,
 				subscribeBuilder.eventName)
-			return
 		}
 
 		config := client.subscribeConfig
 		config.Topic = topic
+		config.GroupID = groupID
+		config.StartOffset = kafka.LastOffset
 		reader := kafka.NewReader(config)
 		defer func() {
 			_ = reader.Close()
 		}()
-
-		if err = reader.SetOffset(kafka.LastOffset); err != nil {
-			logrus.Error("unable to set offset. error : ", err)
-			return
-		}
 
 		for {
 			consumerMessage, err := reader.ReadMessage(subscribeBuilder.ctx)
@@ -225,6 +230,7 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) {
 			go client.processMessage(consumerMessage)
 		}
 	}()
+	return nil
 }
 
 // registerCallback add callback to map with topic and eventName as a key
@@ -301,6 +307,7 @@ func (client *KafkaClient) runCallback(event *Event, consumerMessage kafka.Messa
 		EventName: event.EventName,
 		Namespace: event.Namespace,
 		UserID:    event.UserID,
+		SessionID: event.SessionID,
 		TraceID:   event.TraceID,
 		Timestamp: event.Timestamp,
 		Version:   event.Version,
