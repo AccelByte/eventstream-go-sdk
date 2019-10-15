@@ -40,6 +40,7 @@ func newStdoutClient(prefix string) *StdoutClient {
 // Publish print event to console
 func (client *StdoutClient) Publish(publishBuilder *PublishBuilder) error {
 	if publishBuilder == nil {
+		logrus.Error("unable to publish nil event")
 		return errors.New("unable to publish nil event")
 	}
 	event := &Event{
@@ -56,7 +57,7 @@ func (client *StdoutClient) Publish(publishBuilder *PublishBuilder) error {
 
 	eventByte, err := marshal(event)
 	if err != nil {
-		return err
+		logrus.Errorf("unable to marshal event : %s , error : %v", publishBuilder.eventName, err)
 	}
 
 	fmt.Println(string(eventByte))
@@ -69,7 +70,7 @@ func (client *StdoutClient) Register(subscribeBuilder *SubscribeBuilder) error {
 		Topic     string    `json:"topic"`
 		EventName string    `json:"name"`
 		Timestamp time.Time `json:"timestamp"`
-		Version   string    `json:"version"`
+		Version   int       `json:"version"`
 	}{
 		Topic:     subscribeBuilder.topic,
 		EventName: subscribeBuilder.eventName,
@@ -80,7 +81,6 @@ func (client *StdoutClient) Register(subscribeBuilder *SubscribeBuilder) error {
 	eventByte, err := json.Marshal(&subscribe)
 	if err != nil {
 		logrus.Errorf("unable to marshal event : %s , error : %v", subscribe.EventName, err)
-		return err
 	}
 
 	fmt.Println(string(eventByte))

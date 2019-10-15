@@ -34,8 +34,26 @@ type Payload struct {
 func createKafkaClient(t *testing.T) Client {
 	t.Helper()
 
+	config := &BrokerConfig{
+		LogMode:          OffLevel,
+		StrictValidation: true,
+	}
+
 	brokerList := []string{"localhost:9092"}
-	client, _ := NewClient(prefix, eventStreamKafka, brokerList)
+	client, _ := NewClient(prefix, eventStreamKafka, brokerList, config)
+	return client
+}
+
+func createInvalidKafkaClient(t *testing.T) Client {
+	t.Helper()
+
+	config := &BrokerConfig{
+		LogMode:          DebugLevel,
+		StrictValidation: true,
+	}
+
+	brokerList := []string{"invalidbroker:9092"}
+	client, _ := NewClient(prefix, eventStreamKafka, brokerList, config)
 	return client
 }
 
@@ -139,6 +157,67 @@ func TestKafkaPubSubSuccess(t *testing.T) {
 }
 
 // nolint dupl
+func TestKafkaPubFailed(t *testing.T) {
+	timeoutChan := make(chan bool, 1)
+	doneChan := make(chan bool, 1)
+	timeout(t, timeoutChan)
+
+	client := createInvalidKafkaClient(t)
+
+	topicName := constructTopicTest()
+
+	var mockPayload = make(map[string]interface{})
+	mockPayload[testPayload] = Payload{FriendID: "user456"}
+	mockEvent := &Event{
+		EventName: "testEvent",
+		Namespace: "event",
+		ClientID:  "7d480ce0e8624b02901bd80d9ba9817c",
+		TraceID:   "01c34ec3b07f4bfaa59ba0184a3de14d",
+		UserID:    "e95b150043ff4a2c88427a6eb25e5bc8",
+		Version:   defaultVersion,
+		Payload:   mockPayload,
+	}
+
+	errorCallback := func(event *Event, err error) {
+		assert.NotNil(t, err, "error should not be nil")
+		assert.Equal(t, mockEvent.EventName, event.EventName, "event name should be equal")
+		assert.Equal(t, mockEvent.Namespace, event.Namespace, "namespace should be equal")
+		assert.Equal(t, mockEvent.ClientID, event.ClientID, "client ID should be equal")
+		assert.Equal(t, mockEvent.TraceID, event.TraceID, "trace ID should be equal")
+		assert.Equal(t, mockEvent.UserID, event.UserID, "user ID should be equal")
+		assert.Equal(t, mockEvent.SessionID, event.SessionID, "session ID should be equal")
+		assert.Equal(t, mockEvent.Version, event.Version, "version should be equal")
+		doneChan <- true
+	}
+
+	err := client.Publish(
+		NewPublish().
+			Topic(topicName).
+			EventName(mockEvent.EventName).
+			Namespace(mockEvent.Namespace).
+			ClientID(mockEvent.ClientID).
+			UserID(mockEvent.UserID).
+			SessionID(mockEvent.SessionID).
+			TraceID(mockEvent.TraceID).
+			Context(context.Background()).
+			Payload(mockPayload).
+			ErrorCallback(errorCallback))
+	if err != nil {
+		assert.FailNow(t, errorPublish, err)
+		return
+	}
+
+	for {
+		select {
+		case <-doneChan:
+			return
+		case <-timeoutChan:
+			assert.FailNow(t, errorTimeout)
+		}
+	}
+}
+
+// nolint dupl
 func TestKafkaPubSubMultipleTopicSuccess(t *testing.T) {
 	timeoutChan := make(chan bool, 1)
 	doneChan := make(chan bool, 2)
@@ -157,7 +236,7 @@ func TestKafkaPubSubMultipleTopicSuccess(t *testing.T) {
 		TraceID:   "882da8cddd174d12af25da6310b47bd5",
 		UserID:    "48bf8a020b584f31bc605bf65d3300ed",
 		SessionID: "c1ab4f754acc4cb48a8f68dd25cfca21",
-		Version:   "0.2.0",
+		Version:   2,
 		Payload:   mockPayload,
 	}
 
@@ -228,7 +307,7 @@ func TestKafkaPubSubMultipleTopicSuccess(t *testing.T) {
 			UserID(mockEvent.UserID).
 			SessionID(mockEvent.SessionID).
 			TraceID(mockEvent.TraceID).
-			Version("0.2.0").
+			Version(2).
 			Context(context.Background()).
 			Payload(mockPayload))
 	if err != nil {
@@ -270,7 +349,7 @@ func TestKafkaPubSubDifferentGroupID(t *testing.T) {
 		TraceID:   "2a44c482cd444f7cae29e90adb701315",
 		UserID:    "f13db76e044f43d988a2df1c7ea0000f",
 		SessionID: "77a0313e89a74c0684aacc1dc80329e6",
-		Version:   "0.2.0",
+		Version:   2,
 		Payload:   mockPayload,
 	}
 
@@ -343,7 +422,7 @@ func TestKafkaPubSubDifferentGroupID(t *testing.T) {
 			UserID(mockEvent.UserID).
 			SessionID(mockEvent.SessionID).
 			TraceID(mockEvent.TraceID).
-			Version("0.2.0").
+			Version(2).
 			Context(context.Background()).
 			Payload(mockPayload))
 	if err != nil {
@@ -385,7 +464,7 @@ func TestKafkaPubSubSameGroupID(t *testing.T) {
 		ClientID:  "269b3ade83dd45ebbb896609bf10fe03",
 		TraceID:   "b4a410fb53d2448b8648ba0c58f09ce4",
 		UserID:    "71895627426741148ad2d85399c53d71",
-		Version:   "0.2.0",
+		Version:   2,
 		Payload:   mockPayload,
 	}
 
@@ -458,7 +537,7 @@ func TestKafkaPubSubSameGroupID(t *testing.T) {
 			UserID(mockEvent.UserID).
 			SessionID(mockEvent.SessionID).
 			TraceID(mockEvent.TraceID).
-			Version("0.2.0").
+			Version(2).
 			Context(context.Background()).
 			Payload(mockPayload))
 	if err != nil {
