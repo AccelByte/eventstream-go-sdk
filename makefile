@@ -19,7 +19,7 @@ test:
 	docker-compose -f docker-compose-test.yml up -d
 	sleep 30
 	CGO_ENABLED=0 go test -v -cover ./...
-	docker-compose -f docker-compose-test.yml stop
+	docker-compose -f docker-compose-test.yml down
 
 coverage:
 	go test -coverprofile=coverage.out ./...

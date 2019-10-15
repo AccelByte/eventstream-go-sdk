@@ -25,8 +25,17 @@ import (
 )
 
 func main() {
+
+	config := &eventstream.BrokerConfig{
+		LogMode:          eventstream.InfoLevel,
+		StrictValidation: true,
+		DialTimeout:      0,
+		ReadTimeout:      0,
+		WriteTimeout:     0,
+	}
+
 	prefix := "example"
-	client, err := eventstream.NewClient(prefix, "stdout", nil)
+	client, err := eventstream.NewClient(prefix, "stdout", nil, config)
 	if err != nil {
 		logrus.Error(err)
 	}
@@ -56,7 +65,7 @@ func main() {
 			UserID("e635e94c2afb408c9427f143b293a3c7").
 			SessionID("9428c3dd028849cf84c1a763e1b7ea71").
 			TraceID("f75368ef5603402ca98af501304949c0").
-			Version("version").
+			Version(1).
 			Context(context.Background()).
 			Payload(map[string]interface{}{
 				"payload1": struct {

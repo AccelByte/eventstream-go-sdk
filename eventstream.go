@@ -22,6 +22,8 @@ import (
 	"time"
 )
 
+type level uint8
+
 const (
 	eventStreamNull   = "none"
 	eventStreamStdout = "stdout"
@@ -30,8 +32,16 @@ const (
 
 const (
 	separator      = "."
-	defaultVersion = "0.1.0"
+	defaultVersion = 1
 	defaultGroupID = "*"
+)
+
+const (
+	OffLevel level = iota
+	InfoLevel
+	DebugLevel
+	WarnLevel
+	ErrorLevel
 )
 
 // Event defines the structure of event
@@ -44,36 +54,40 @@ type Event struct {
 	UserID    string                 `json:"userId"`
 	SessionID string                 `json:"sessionId"`
 	Timestamp string                 `json:"timestamp"`
-	Version   string                 `json:"version"`
+	Version   int                    `json:"version"`
 	Payload   map[string]interface{} `json:"payload"`
 }
 
 // BrokerConfig is custom configuration for message broker
 type BrokerConfig struct {
-	DialTimeout  time.Duration
-	ReadTimeout  time.Duration
-	WriteTimeout time.Duration
+	LogMode          level
+	StrictValidation bool
+	DialTimeout      time.Duration
+	ReadTimeout      time.Duration
+	WriteTimeout     time.Duration
 }
 
 // PublishBuilder defines the structure of message which is sent through message broker
 type PublishBuilder struct {
-	topic     []string
-	eventName string
-	namespace string
-	clientID  string
-	traceID   string
-	userID    string
-	sessionID string
-	version   string
-	payload   map[string]interface{}
-	ctx       context.Context
+	topic         []string
+	eventName     string
+	namespace     string
+	clientID      string
+	traceID       string
+	userID        string
+	sessionID     string
+	version       int
+	payload       map[string]interface{}
+	errorCallback func(event *Event, err error)
+	ctx           context.Context
 }
 
 // NewPublish create new PublishBuilder instance
 func NewPublish() *PublishBuilder {
 	return &PublishBuilder{
-		version: defaultVersion,
-		ctx:     context.Background(),
+		version:       defaultVersion,
+		ctx:           context.Background(),
+		errorCallback: nil,
 	}
 }
 
@@ -120,7 +134,7 @@ func (p *PublishBuilder) UserID(userID string) *PublishBuilder {
 }
 
 // Version set event schema version
-func (p *PublishBuilder) Version(version string) *PublishBuilder {
+func (p *PublishBuilder) Version(version int) *PublishBuilder {
 	p.version = version
 	return p
 }
@@ -128,6 +142,12 @@ func (p *PublishBuilder) Version(version string) *PublishBuilder {
 // Payload is a event payload that will be published
 func (p *PublishBuilder) Payload(payload map[string]interface{}) *PublishBuilder {
 	p.payload = payload
+	return p
+}
+
+// ErrorCallback function to handle the event when failed to publish
+func (p *PublishBuilder) ErrorCallback(errorCallback func(event *Event, err error)) *PublishBuilder {
+	p.errorCallback = errorCallback
 	return p
 }
 
