@@ -22,7 +22,7 @@ var (
 )
 
 // validatePublishEvent validate published event
-func validatePublishEvent(publishBuilder *PublishBuilder) error {
+func validatePublishEvent(publishBuilder *PublishBuilder, strictValidation bool) error {
 	publishEvent := struct {
 		Topic     []string `valid:"required"`
 		EventName string   `valid:"alphanum,stringlength(1|256),required"`
@@ -51,22 +51,24 @@ func validatePublishEvent(publishBuilder *PublishBuilder) error {
 		return errInvalidPubStruct
 	}
 
-	if publishEvent.UserID != "" && !validator.IsUUID4WithoutHyphens(publishEvent.UserID) {
-		return errInvalidUserID
-	}
+	// only additional validation that included to strictValidation
+	if strictValidation {
+		if publishEvent.UserID != "" && !validator.IsUUID4WithoutHyphens(publishEvent.UserID) {
+			return errInvalidUserID
+		}
 
-	if publishEvent.ClientID != "" && !validator.IsUUID4WithoutHyphens(publishEvent.ClientID) {
-		return errInvalidClientID
-	}
+		if publishEvent.ClientID != "" && !validator.IsUUID4WithoutHyphens(publishEvent.ClientID) {
+			return errInvalidClientID
+		}
 
-	if publishEvent.SessionID != "" && !validator.IsUUID4WithoutHyphens(publishEvent.SessionID) {
-		return errInvalidSessionID
-	}
+		if publishEvent.SessionID != "" && !validator.IsUUID4WithoutHyphens(publishEvent.SessionID) {
+			return errInvalidSessionID
+		}
 
-	if publishEvent.TraceID != "" && !validator.IsUUID4WithoutHyphens(publishEvent.TraceID) {
-		return errInvalidTraceID
+		if publishEvent.TraceID != "" && !validator.IsUUID4WithoutHyphens(publishEvent.TraceID) {
+			return errInvalidTraceID
+		}
 	}
-
 	return nil
 }
 

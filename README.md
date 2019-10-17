@@ -43,10 +43,21 @@ To create a kafka stream client, just pass the stream parameter with `kafka`.
 #### Custom Configuration
 SDK support with custom configuration for kafka stream, that is :
 
-* DialTimeout : Timeout duration during connecting to kafka broker (time.Duration)
-* ReadTimeout : Timeout duration during consume topic from kafka broker (time.Duration)
-* WriteTimeout : Timeout duration during publish event to kafka broker (time.Duration) 
+* DialTimeout : Timeout duration during connecting to kafka broker. Default: 10 Seconds (time.Duration)
+* ReadTimeout : Timeout duration during consume topic from kafka broker. Default: 10 Seconds (time.Duration)
+* WriteTimeout : Timeout duration during publish event to kafka broker. Default: 10 Seconds (time.Duration) 
+* LogMode : eventstream will print log based on following levels: Info, Warn, Debug, Error and Off. Default: Off (event stream level) 
+* StrictValidation : If it set true, eventstream will enable strict validation for event fields, Default: False (boolean) 
 
+```go
+    config := &eventstream.BrokerConfig{
+		LogMode:          eventstream.InfoLevel,
+		StrictValidation: true,
+		DialTimeout:      1 * time.Second,
+		ReadTimeout:      1 * time.Second,
+		WriteTimeout:     1 * time.Second,
+	}
+```
 
 ### Stdout Stream
 This stream is for testing purpose. This will print the event in stdout. It should not be used in production since this 
@@ -78,20 +89,21 @@ err := client.Publish(
 			TraceID(TraceID).
 			Context(Context).
 			Version(Version).
-			Payload(Payload))
+			Payload(Payload).
+			ErrorCallback(func(event *Event, err error) {}))
 ```
 
 #### Parameter 
 * Topic : List of topic / channel. (variadic string - alphaNumeric(256) - Required)
-* EventName : Event name. (string - alphaNumeric(256) - Required)
-* Namespace : Event namespace. (string - alphaNumeric(256) - Required)
+* EventName : Event name. (string - alphaNumeric(256) - Required) * Namespace : Event namespace. (string - alphaNumeric(256) - Required)
 * ClientID : Publisher client ID. (string - UUID v4 without Hyphens)
 * UserID : Publisher user ID. (string - UUID v4 without Hyphens)
 * SessionID : Publisher session ID. (string - UUID v4 without Hyphens)
 * TraceID : Trace ID. (string - UUID v4 without Hyphens)
 * Context : Golang context. (context - default: context.background)
-* Version : Version of schema. (string - default: `0.1.0`)
+* Version : Version of schema. (integer - default: `1`)
 * Payload : Additional attribute. (map[string]interface{})
+* ErrorCallback : Callback function when event failed to publish. (func(event *Event, err error){})
 
 ### Subscribe
 To subscribe an event from specific topic in stream, client should be register a callback function that executed once event received.
@@ -132,5 +144,5 @@ Event message format :
 * userId : Publisher user ID (string - UUID v4 without Hyphens)
 * sessionId : Publisher session ID (string - UUID v4 without Hyphens)
 * timestamp : Event time (time.Time)
-* version : Event schema version (string)
+* version : Event schema version (integer)
 * payload : Set of data / object that given by producer. Each data have own key for specific purpose. (map[string]interface{})
