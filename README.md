@@ -46,7 +46,7 @@ SDK support with custom configuration for kafka stream, that is :
 * DialTimeout : Timeout duration during connecting to kafka broker. Default: 10 Seconds (time.Duration)
 * ReadTimeout : Timeout duration during consume topic from kafka broker. Default: 10 Seconds (time.Duration)
 * WriteTimeout : Timeout duration during publish event to kafka broker. Default: 10 Seconds (time.Duration) 
-* LogMode : eventstream will print log based on following levels: Info, Warn, Debug, Error and Off. Default: Off (event stream level) 
+* LogMode : eventstream will print log based on following levels: info, warn, debug, error and off. Default: off (string) 
 * StrictValidation : If it set true, eventstream will enable strict validation for event fields, Default: False (boolean) 
 
 ```go

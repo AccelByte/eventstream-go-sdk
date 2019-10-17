@@ -22,8 +22,6 @@ import (
 	"time"
 )
 
-type level uint8
-
 const (
 	eventStreamNull   = "none"
 	eventStreamStdout = "stdout"
@@ -36,12 +34,13 @@ const (
 	defaultGroupID = "*"
 )
 
+// log level
 const (
-	OffLevel level = iota
-	InfoLevel
-	DebugLevel
-	WarnLevel
-	ErrorLevel
+	OffLevel   = "off"
+	InfoLevel  = "info"
+	DebugLevel = "debug"
+	WarnLevel  = "warn"
+	ErrorLevel = "error"
 )
 
 // Event defines the structure of event
@@ -60,7 +59,7 @@ type Event struct {
 
 // BrokerConfig is custom configuration for message broker
 type BrokerConfig struct {
-	LogMode          level
+	LogMode          string
 	StrictValidation bool
 	DialTimeout      time.Duration
 	ReadTimeout      time.Duration

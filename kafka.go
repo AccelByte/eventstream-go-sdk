@@ -77,7 +77,7 @@ func setConfig(writerConfig *kafka.WriterConfig, readerConfig *kafka.ReaderConfi
 	setLogLevel(config.LogMode)
 }
 
-func setLogLevel(logMode level) {
+func setLogLevel(logMode string) {
 	switch logMode {
 	case DebugLevel:
 		log.SetLevel(log.DebugLevel)
