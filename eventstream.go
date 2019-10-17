@@ -22,6 +22,8 @@ import (
 	"time"
 )
 
+type level uint8
+
 const (
 	eventStreamNull   = "none"
 	eventStreamStdout = "stdout"

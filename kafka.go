@@ -149,7 +149,7 @@ func (client *KafkaClient) Publish(publishBuilder *PublishBuilder) error {
 		go func() {
 			err = backoff.RetryNotify(func() error {
 				return client.publishEvent(publishBuilder.ctx, topic, publishBuilder.eventName, config, message)
-			}, backoff.WithMaxRetries(backoff.NewConstantBackOff(5*time.Second), maxBackOffCount),
+			}, backoff.WithMaxRetries(backoff.NewExponentialBackOff(), maxBackOffCount),
 				func(err error, _ time.Duration) {
 					log.Debugf("retrying publish event: error %v: ", err)
 				})
