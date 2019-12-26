@@ -282,6 +282,13 @@ func (client *KafkaClient) registerCallback(topic, eventName string, callback fu
 		if _, ok = innerValue.Load(eventName); ok {
 			return true, nil
 		}
+
+		// event callback with this topic name is there with another event callback registered, so append it
+		if innerValue != nil {
+			innerValue.Store(eventName, callback)
+			client.subscribeMap.Store(topic, innerValue)
+			return false, nil
+		}
 	}
 
 	var callbackMap = &sync.Map{}
