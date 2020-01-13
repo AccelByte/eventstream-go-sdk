@@ -33,3 +33,7 @@ func (client *BlackholeClient) Register(subscribeBuilder *SubscribeBuilder) erro
 	// do nothing
 	return nil
 }
+
+func (client *BlackholeClient) Unregister(topic string) {
+	// do nothing
+}

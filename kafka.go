@@ -219,6 +219,13 @@ func constructEvent(publishBuilder *PublishBuilder) (kafka.Message, *Event, erro
 
 }
 
+// Unregister unregister callback function and topic
+func (client *KafkaClient) Unregister(topic string) {
+	if _, ok := client.subscribeMap.Load(topic); ok {
+		client.subscribeMap.Delete(topic)
+	}
+}
+
 // Register register callback function and then subscribe topic
 func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 	if subscribeBuilder == nil {

@@ -221,4 +221,5 @@ func NewClient(prefix, stream string, brokers []string, config ...*BrokerConfig)
 type Client interface {
 	Publish(publishBuilder *PublishBuilder) error
 	Register(subscribeBuilder *SubscribeBuilder) error
+	Unregister(topic string)
 }

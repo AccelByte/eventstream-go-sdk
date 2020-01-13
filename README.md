@@ -120,6 +120,14 @@ err := client.Register(
 			Callback(func(event *Event, err error) {}))
 ```
 
+### Unsubscribe
+To unsubscribe the topic in stream, client should run unregister process based on the topic name.
+
+To unsubscribe the topic, use this function:
+```go
+client.Unregister(topicName)
+```
+
 #### Parameter 
 * Topic : Subscribed topic. (string - alphaNumeric(256) - Required)
 * EventName : Event name. (string - alphaNumeric(256) - Required)
