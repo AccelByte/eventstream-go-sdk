@@ -57,6 +57,9 @@ type KafkaClient struct {
 
 	// map to store callback function
 	subscribeMap *sync.Map
+
+	// map to store stop channel for unsubscribe
+	stopChannelMap *sync.Map
 }
 
 func setConfig(writerConfig *kafka.WriterConfig, readerConfig *kafka.ReaderConfig, config *BrokerConfig) {
@@ -121,6 +124,7 @@ func newKafkaClient(brokers []string, prefix string, config ...*BrokerConfig) *K
 		publishConfig:    *writerConfig,
 		subscribeConfig:  *readerConfig,
 		subscribeMap:     &sync.Map{},
+		stopChannelMap:   &sync.Map{},
 	}
 }
 
@@ -224,6 +228,9 @@ func (client *KafkaClient) Unregister(topic string) {
 	if _, ok := client.subscribeMap.Load(topic); ok {
 		client.subscribeMap.Delete(topic)
 	}
+	if val, ok := client.stopChannelMap.Load(topic); ok {
+		val.(chan interface{}) <- true
+	}
 }
 
 // Register register callback function and then subscribe topic
@@ -263,14 +270,21 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 		defer func() {
 			_ = reader.Close()
 		}()
+		stopChan := make(chan interface{})
+		client.stopChannelMap.Store(topic, stopChan)
 
 		for {
-			consumerMessage, err := reader.ReadMessage(subscribeBuilder.ctx)
-			if err != nil {
-				log.Error("unable to subscribe topic from kafka. error: ", err)
+			select {
+			case <-stopChan:
 				return
+			default:
+				consumerMessage, errRead := reader.ReadMessage(subscribeBuilder.ctx)
+				if errRead != nil {
+					log.Error("unable to subscribe topic from kafka. error: ", errRead)
+					return
+				}
+				go client.processMessage(consumerMessage, groupID)
 			}
-			go client.processMessage(consumerMessage, groupID)
 		}
 	}()
 	return nil
