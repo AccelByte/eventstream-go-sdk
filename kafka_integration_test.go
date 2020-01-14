@@ -628,3 +628,79 @@ func TestKafkaRegisterMultipleSubscriberCallbackSuccess(t *testing.T) {
 		}
 	}
 }
+
+func TestKafkaUnregisterTopicSuccess(t *testing.T) {
+	timeoutChan := make(chan bool, 1)
+	doneChan := make(chan bool, 1)
+	timeout(t, timeoutChan)
+
+	client := createKafkaClient(t)
+
+	topicName := constructTopicTest()
+
+	var mockPayload = make(map[string]interface{})
+	mockPayload[testPayload] = "testPayload"
+	mockEvent := &Event{
+		EventName: "testEvent",
+		Namespace: "event",
+		ClientID:  "7d480ce0e8624b02901bd80d9ba9817c",
+		TraceID:   "01c34ec3b07f4bfaa59ba0184a3de14d",
+		UserID:    "e95b150043ff4a2c88427a6eb25e5bc8",
+		Version:   defaultVersion,
+		Payload:   mockPayload,
+	}
+
+	err := client.Register(
+		NewSubscribe().
+			Topic(topicName).
+			EventName(mockEvent.EventName).
+			Callback(func(_ *Event, err error) {
+				assert.NoError(t, err, "there's error right before event consumed: %v", err)
+				doneChan <- true
+			}))
+	if err != nil {
+		assert.FailNow(t, errorSubscribe, err)
+		return
+	}
+
+	err = client.Register(
+		NewSubscribe().
+			Topic("anotherevent").
+			EventName(mockEvent.EventName).
+			Callback(func(_ *Event, err error) {
+				assert.NoError(t, err, "there's error right before event consumed: %v", err)
+				// just to test subscriber, no need any  action here
+				doneChan <- true
+			}))
+	if err != nil {
+		assert.FailNow(t, errorSubscribe, err)
+		return
+	}
+
+	client.Unregister("anotherevent")
+
+	err = client.Publish(
+		NewPublish().
+			Topic(topicName).
+			EventName(mockEvent.EventName).
+			Namespace(mockEvent.Namespace).
+			ClientID(mockEvent.ClientID).
+			UserID(mockEvent.UserID).
+			SessionID(mockEvent.SessionID).
+			TraceID(mockEvent.TraceID).
+			Context(context.Background()).
+			Payload(mockPayload))
+	if err != nil {
+		assert.FailNow(t, errorPublish, err)
+		return
+	}
+
+	for {
+		select {
+		case <-doneChan:
+			return
+		case <-timeoutChan:
+			assert.FailNow(t, errorTimeout)
+		}
+	}
+}

@@ -21,7 +21,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"sync"
 	"time"
 
@@ -90,8 +89,6 @@ func setLogLevel(logMode string) {
 		log.SetLevel(log.WarnLevel)
 	case ErrorLevel:
 		log.SetLevel(log.ErrorLevel)
-	default:
-		log.SetOutput(ioutil.Discard)
 	}
 }
 
@@ -225,11 +222,15 @@ func constructEvent(publishBuilder *PublishBuilder) (kafka.Message, *Event, erro
 
 // Unregister unregister callback function and topic
 func (client *KafkaClient) Unregister(topic string) {
+	log.Debugf("unregister topic %s", topic)
 	if _, ok := client.subscribeMap.Load(topic); ok {
 		client.subscribeMap.Delete(topic)
 	}
 	if val, ok := client.stopChannelMap.Load(topic); ok {
-		val.(chan interface{}) <- true
+		stopChan, ok := val.(chan bool)
+		if ok {
+			stopChan <- true
+		}
 	}
 }
 
@@ -270,7 +271,7 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 		defer func() {
 			_ = reader.Close()
 		}()
-		stopChan := make(chan interface{})
+		stopChan := make(chan bool, 1)
 		client.stopChannelMap.Store(topic, stopChan)
 
 		for {
