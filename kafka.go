@@ -194,16 +194,17 @@ func (client *KafkaClient) publishEvent(ctx context.Context, topic, eventName st
 func constructEvent(publishBuilder *PublishBuilder) (kafka.Message, *Event, error) {
 	id := generateID()
 	event := &Event{
-		ID:        id,
-		EventName: publishBuilder.eventName,
-		Namespace: publishBuilder.namespace,
-		ClientID:  publishBuilder.clientID,
-		UserID:    publishBuilder.userID,
-		TraceID:   publishBuilder.traceID,
-		SessionID: publishBuilder.sessionID,
-		Timestamp: time.Now().UTC().Format(time.RFC3339),
-		Version:   publishBuilder.version,
-		Payload:   publishBuilder.payload,
+		ID:          id,
+		EventName:   publishBuilder.eventName,
+		Namespace:   publishBuilder.namespace,
+		ClientID:    publishBuilder.clientID,
+		UserID:      publishBuilder.userID,
+		TraceID:     publishBuilder.traceID,
+		SpanContext: publishBuilder.spanContext,
+		SessionID:   publishBuilder.sessionID,
+		Timestamp:   time.Now().UTC().Format(time.RFC3339),
+		Version:     publishBuilder.version,
+		Payload:     publishBuilder.payload,
 	}
 
 	eventBytes, err := marshal(event)
@@ -349,15 +350,16 @@ func (client *KafkaClient) runCallback(event *Event, consumerMessage kafka.Messa
 	log.Debugf("run callback for topic: %s , event name: %s, groupID: %s", consumerMessage.Topic,
 		event.EventName, groupID)
 	go callback(&Event{
-		ID:        event.ID,
-		ClientID:  event.ClientID,
-		EventName: event.EventName,
-		Namespace: event.Namespace,
-		UserID:    event.UserID,
-		SessionID: event.SessionID,
-		TraceID:   event.TraceID,
-		Timestamp: event.Timestamp,
-		Version:   event.Version,
-		Payload:   event.Payload,
+		ID:          event.ID,
+		ClientID:    event.ClientID,
+		EventName:   event.EventName,
+		Namespace:   event.Namespace,
+		UserID:      event.UserID,
+		SessionID:   event.SessionID,
+		TraceID:     event.TraceID,
+		SpanContext: event.SpanContext,
+		Timestamp:   event.Timestamp,
+		Version:     event.Version,
+		Payload:     event.Payload,
 	}, nil)
 }

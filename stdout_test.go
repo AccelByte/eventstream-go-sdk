@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNewStdoutClient(t *testing.T) {
@@ -41,33 +42,37 @@ func TestStdoutPublish(t *testing.T) {
 	var mockPayload = make(map[string]interface{})
 	mockPayload[testPayload] = Payload{FriendID: "user456"}
 	mockEvent := struct {
-		ID        string      `json:"id"`
-		EventName string      `json:"name"`
-		Namespace string      `json:"namespace"`
-		ClientID  string      `json:"clientId"`
-		TraceID   string      `json:"traceId"`
-		UserID    string      `json:"userId"`
-		Timestamp time.Time   `json:"timestamp"`
-		Version   string      `json:"version"`
-		Payload   interface{} `json:"payload"`
+		ID          string      `json:"id"`
+		EventName   string      `json:"name"`
+		Namespace   string      `json:"namespace"`
+		ClientID    string      `json:"clientId"`
+		TraceID     string      `json:"traceId"`
+		SpanContext string      `json:"spanContext"`
+		UserID      string      `json:"userId"`
+		Timestamp   time.Time   `json:"timestamp"`
+		Version     string      `json:"version"`
+		Payload     interface{} `json:"payload"`
 	}{
-		EventName: "testEvent",
-		Namespace: "event",
-		ClientID:  "client123",
-		TraceID:   "trace123",
-		UserID:    "user123",
-		Version:   "0.1.0",
-		Payload:   mockPayload,
+		EventName:   "testEvent",
+		Namespace:   "event",
+		ClientID:    "client123",
+		TraceID:     "trace123",
+		SpanContext: "span123",
+		UserID:      "user123",
+		Version:     "0.1.0",
+		Payload:     mockPayload,
 	}
 
-	_ = client.Publish(
+	err := client.Publish(
 		NewPublish().
 			Topic(topicName).
 			EventName(mockEvent.EventName).
+			SpanContext(mockEvent.SpanContext).
 			Namespace(mockEvent.Namespace).
 			ClientID(mockEvent.ClientID).
 			UserID(mockEvent.UserID).
 			Payload(mockPayload))
+	require.NoError(t, err)
 }
 
 func TestStdoutSubscribe(t *testing.T) {

@@ -44,15 +44,16 @@ func (client *StdoutClient) Publish(publishBuilder *PublishBuilder) error {
 		return errors.New("unable to publish nil event")
 	}
 	event := &Event{
-		ID:        generateID(),
-		EventName: publishBuilder.eventName,
-		Namespace: publishBuilder.namespace,
-		ClientID:  publishBuilder.clientID,
-		UserID:    publishBuilder.userID,
-		TraceID:   publishBuilder.traceID,
-		Timestamp: time.Now().UTC().Format(time.RFC3339),
-		Version:   publishBuilder.version,
-		Payload:   publishBuilder.payload,
+		ID:          generateID(),
+		EventName:   publishBuilder.eventName,
+		Namespace:   publishBuilder.namespace,
+		ClientID:    publishBuilder.clientID,
+		UserID:      publishBuilder.userID,
+		TraceID:     publishBuilder.traceID,
+		SpanContext: publishBuilder.spanContext,
+		Timestamp:   time.Now().UTC().Format(time.RFC3339),
+		Version:     publishBuilder.version,
+		Payload:     publishBuilder.payload,
 	}
 
 	eventByte, err := marshal(event)

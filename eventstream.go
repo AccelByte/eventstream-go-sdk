@@ -45,16 +45,17 @@ const (
 
 // Event defines the structure of event
 type Event struct {
-	ID        string                 `json:"id"`
-	EventName string                 `json:"name"`
-	Namespace string                 `json:"namespace"`
-	ClientID  string                 `json:"clientId"`
-	TraceID   string                 `json:"traceId"`
-	UserID    string                 `json:"userId"`
-	SessionID string                 `json:"sessionId"`
-	Timestamp string                 `json:"timestamp"`
-	Version   int                    `json:"version"`
-	Payload   map[string]interface{} `json:"payload"`
+	ID          string                 `json:"id"`
+	EventName   string                 `json:"name"`
+	Namespace   string                 `json:"namespace"`
+	ClientID    string                 `json:"clientId"`
+	TraceID     string                 `json:"traceId"`
+	SpanContext string                 `json:"spanContext"`
+	UserID      string                 `json:"userId"`
+	SessionID   string                 `json:"sessionId"`
+	Timestamp   string                 `json:"timestamp"`
+	Version     int                    `json:"version"`
+	Payload     map[string]interface{} `json:"payload"`
 }
 
 // BrokerConfig is custom configuration for message broker
@@ -73,6 +74,7 @@ type PublishBuilder struct {
 	namespace     string
 	clientID      string
 	traceID       string
+	spanContext   string
 	userID        string
 	sessionID     string
 	version       int
@@ -117,6 +119,12 @@ func (p *PublishBuilder) ClientID(clientID string) *PublishBuilder {
 // TraceID set traceID of publisher event
 func (p *PublishBuilder) TraceID(traceID string) *PublishBuilder {
 	p.traceID = traceID
+	return p
+}
+
+// SpanContext set jaeger spanContext of publisher event
+func (p *PublishBuilder) SpanContext(spanID string) *PublishBuilder {
+	p.spanContext = spanID
 	return p
 }
 
