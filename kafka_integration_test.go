@@ -66,16 +66,8 @@ func timeout(t *testing.T, timeoutChan chan bool) {
 	t.Helper()
 	timer := time.NewTimer(time.Duration(timeoutTest) * time.Second)
 	go func() {
-	loop:
-		for {
-			select {
-			case <-timer.C:
-				timeoutChan <- true
-				break loop
-			default:
-				break
-			}
-		}
+		<-timer.C
+		close(timeoutChan)
 	}()
 }
 
