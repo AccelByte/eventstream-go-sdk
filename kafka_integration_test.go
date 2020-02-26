@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	timeoutTest    = 120
+	timeoutTest    = 60
 	prefix         = "prefix"
 	testPayload    = "testPayload"
 	errorTimeout   = "timeout while executing test"
@@ -33,7 +33,7 @@ func createKafkaClient(t *testing.T) Client {
 	t.Helper()
 
 	config := &BrokerConfig{
-		LogMode:          OffLevel,
+		LogMode:          DebugLevel,
 		StrictValidation: true,
 	}
 
