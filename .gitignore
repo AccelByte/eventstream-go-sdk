@@ -17,3 +17,5 @@
 .idea/vcs.xml
 .idea/workspace.xml
 .idea/watcherTasks.xml
+
+/vendor

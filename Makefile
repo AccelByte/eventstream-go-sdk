@@ -18,9 +18,12 @@ clean:
 test:
 	docker-compose -f docker-compose-test.yml up -d
 	sleep 30
-	CGO_ENABLED=0 go test -v -cover ./...
+	CGO_ENABLED=0 go test -v ./...
 	docker-compose -f docker-compose-test.yml down
 
 coverage:
 	go test -coverprofile=coverage.out ./...
 	go tool cover -html=coverage.out
+
+run:
+	docker-compose -f docker-compose-test.yml up

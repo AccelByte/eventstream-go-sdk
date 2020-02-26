@@ -87,6 +87,7 @@ err := client.Publish(
 			UserID(UserID).
 			SessionID(SessionID).
 			TraceID(TraceID).
+			SpanContext(SpanContext).
 			Context(Context).
 			Version(Version).
 			Payload(Payload).
@@ -100,6 +101,7 @@ err := client.Publish(
 * UserID : Publisher user ID. (string - UUID v4 without Hyphens)
 * SessionID : Publisher session ID. (string - UUID v4 without Hyphens)
 * TraceID : Trace ID. (string - UUID v4 without Hyphens)
+* SpanContext : Opentracing Jaeger Span Context(string - optional)
 * Context : Golang context. (context - default: context.background)
 * Version : Version of schema. (integer - default: `1`)
 * Payload : Additional attribute. (map[string]interface{})
@@ -140,9 +142,33 @@ Event message format :
 * name : Event name (string)
 * namespace : Event namespace (string)
 * traceId : Trace ID (string - UUID v4 without Hyphens)
+* spanContext : Opentracing Jaeger Span Context (string - optional)
 * clientId : Publisher client ID (string - UUID v4 without Hyphens)
 * userId : Publisher user ID (string - UUID v4 without Hyphens)
 * sessionId : Publisher session ID (string - UUID v4 without Hyphens)
 * timestamp : Event time (time.Time)
 * version : Event schema version (integer)
 * payload : Set of data / object that given by producer. Each data have own key for specific purpose. (map[string]interface{})
+
+## SpanContext usage
+* Create Jaeger Span Context from an event
+```go
+	import "github.com/AccelByte/go-restful-plugins/v3/pkg/jaeger"
+
+    spanContextString := event.SpanContext
+	span, ctx := jaeger.ChildSpanFromRemoteSpan(rootCtx, "service-name.operation-name", spanContextString)
+```
+
+* Put existing Jaeger Span Context into an event
+```go
+	import "github.com/AccelByte/go-restful-plugins/v3/pkg/jaeger"
+
+    spanContextString := jaeger.GetSpanContextString(span)
+    
+    err := client.Register(
+        NewSubscribe().
+            Topic(topicName).
+            SpanContext(spanContextString).
+            // ...
+```
+

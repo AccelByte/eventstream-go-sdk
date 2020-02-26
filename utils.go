@@ -29,6 +29,7 @@ func constructTopic(prefix, topic string) string {
 	if prefix != "" {
 		return prefix + separator + topic
 	}
+
 	return topic
 }
 
@@ -54,5 +55,6 @@ func marshal(event *Event) ([]byte, error) {
 		logrus.Errorf("unable to marshal event : %s , error : %v", event.EventName, err)
 		return nil, err
 	}
+
 	return bytes, nil
 }

@@ -43,16 +43,18 @@ func (client *StdoutClient) Publish(publishBuilder *PublishBuilder) error {
 		logrus.Error("unable to publish nil event")
 		return errors.New("unable to publish nil event")
 	}
+
 	event := &Event{
-		ID:        generateID(),
-		EventName: publishBuilder.eventName,
-		Namespace: publishBuilder.namespace,
-		ClientID:  publishBuilder.clientID,
-		UserID:    publishBuilder.userID,
-		TraceID:   publishBuilder.traceID,
-		Timestamp: time.Now().UTC().Format(time.RFC3339),
-		Version:   publishBuilder.version,
-		Payload:   publishBuilder.payload,
+		ID:          generateID(),
+		EventName:   publishBuilder.eventName,
+		Namespace:   publishBuilder.namespace,
+		ClientID:    publishBuilder.clientID,
+		UserID:      publishBuilder.userID,
+		TraceID:     publishBuilder.traceID,
+		SpanContext: publishBuilder.spanContext,
+		Timestamp:   time.Now().UTC().Format(time.RFC3339),
+		Version:     publishBuilder.version,
+		Payload:     publishBuilder.payload,
 	}
 
 	eventByte, err := marshal(event)
@@ -61,6 +63,7 @@ func (client *StdoutClient) Publish(publishBuilder *PublishBuilder) error {
 	}
 
 	fmt.Println(string(eventByte))
+
 	return nil
 }
 
@@ -84,5 +87,6 @@ func (client *StdoutClient) Register(subscribeBuilder *SubscribeBuilder) error {
 	}
 
 	fmt.Println(string(eventByte))
+
 	return nil
 }

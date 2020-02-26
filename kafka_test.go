@@ -34,13 +34,14 @@ func TestKafkaPubWithEmptyTopic(t *testing.T) {
 	var mockPayload = make(map[string]interface{})
 	mockPayload[testPayload] = Payload{FriendID: "user456"}
 	mockEvent := &Event{
-		EventName: "testEvent",
-		Namespace: "event",
-		ClientID:  "661a4ac82b854f3ca3ac2e0377d356e4",
-		TraceID:   "1e801bd0eb6946b88f4556d3c4c91e0c",
-		UserID:    "1fe7f425a0e049d29d87ca3d32e45b5a",
-		Version:   2,
-		Payload:   mockPayload,
+		EventName:   "testEvent",
+		Namespace:   "event",
+		ClientID:    "661a4ac82b854f3ca3ac2e0377d356e4",
+		TraceID:     "1e801bd0eb6946b88f4556d3c4c91e0c",
+		SpanContext: "test-span-context",
+		UserID:      "1fe7f425a0e049d29d87ca3d32e45b5a",
+		Version:     2,
+		Payload:     mockPayload,
 	}
 
 	err := client.Publish(
@@ -51,6 +52,7 @@ func TestKafkaPubWithEmptyTopic(t *testing.T) {
 			UserID(mockEvent.UserID).
 			SessionID(mockEvent.SessionID).
 			TraceID(mockEvent.TraceID).
+			SpanContext(mockEvent.SpanContext).
 			Version(2).
 			Context(context.Background()).
 			Payload(mockPayload))
@@ -66,13 +68,14 @@ func TestKafkaPubInvalidEventStruct(t *testing.T) {
 	var mockPayload = make(map[string]interface{})
 	mockPayload[testPayload] = Payload{FriendID: "user456"}
 	mockEvent := &Event{
-		EventName: "testEvent,.,.",
-		Namespace: "event#$%",
-		ClientID:  "661a4ac82b854f3ca3ac2e0377d356e4",
-		TraceID:   "1e801bd0eb6946b88f4556d3c4c91e0c",
-		UserID:    "1fe7f425a0e049d29d87ca3d32e45b5a",
-		Version:   2,
-		Payload:   mockPayload,
+		EventName:   "testEvent,.,.",
+		Namespace:   "event#$%",
+		ClientID:    "661a4ac82b854f3ca3ac2e0377d356e4",
+		TraceID:     "1e801bd0eb6946b88f4556d3c4c91e0c",
+		SpanContext: "test-span-context",
+		UserID:      "1fe7f425a0e049d29d87ca3d32e45b5a",
+		Version:     2,
+		Payload:     mockPayload,
 	}
 
 	err := client.Publish(
@@ -84,6 +87,7 @@ func TestKafkaPubInvalidEventStruct(t *testing.T) {
 			UserID(mockEvent.UserID).
 			SessionID(mockEvent.SessionID).
 			TraceID(mockEvent.TraceID).
+			SpanContext(mockEvent.SpanContext).
 			Version(2).
 			Context(context.Background()).
 			Payload(mockPayload))
@@ -99,13 +103,14 @@ func TestKafkaPubInvalidUserID(t *testing.T) {
 	var mockPayload = make(map[string]interface{})
 	mockPayload[testPayload] = Payload{FriendID: "user456"}
 	mockEvent := &Event{
-		EventName: "testEvent",
-		Namespace: "event",
-		ClientID:  "691768fad8a443cd89aa73132ef47834",
-		TraceID:   "c9bb37252d7246fab229ebd7d5d688ec",
-		UserID:    "user123",
-		Version:   2,
-		Payload:   mockPayload,
+		EventName:   "testEvent",
+		Namespace:   "event",
+		ClientID:    "691768fad8a443cd89aa73132ef47834",
+		TraceID:     "c9bb37252d7246fab229ebd7d5d688ec",
+		SpanContext: "test-span-context",
+		UserID:      "user123",
+		Version:     2,
+		Payload:     mockPayload,
 	}
 
 	err := client.Publish(
@@ -117,6 +122,7 @@ func TestKafkaPubInvalidUserID(t *testing.T) {
 			UserID(mockEvent.UserID).
 			SessionID(mockEvent.SessionID).
 			TraceID(mockEvent.TraceID).
+			SpanContext(mockEvent.SpanContext).
 			Version(2).
 			Context(context.Background()).
 			Payload(mockPayload))
@@ -132,13 +138,14 @@ func TestKafkaPubInvalidClientID(t *testing.T) {
 	var mockPayload = make(map[string]interface{})
 	mockPayload[testPayload] = Payload{FriendID: "user456"}
 	mockEvent := &Event{
-		EventName: "testEvent",
-		Namespace: "event",
-		ClientID:  "client123",
-		TraceID:   "5005e27d01064f23b962e8fd2e560a8a",
-		UserID:    "661a4ac82b854f3ca3ac2e0377d356e4",
-		Version:   2,
-		Payload:   mockPayload,
+		EventName:   "testEvent",
+		Namespace:   "event",
+		ClientID:    "client123",
+		TraceID:     "5005e27d01064f23b962e8fd2e560a8a",
+		SpanContext: "test-span-context",
+		UserID:      "661a4ac82b854f3ca3ac2e0377d356e4",
+		Version:     2,
+		Payload:     mockPayload,
 	}
 
 	err := client.Publish(
@@ -150,6 +157,7 @@ func TestKafkaPubInvalidClientID(t *testing.T) {
 			UserID(mockEvent.UserID).
 			SessionID(mockEvent.SessionID).
 			TraceID(mockEvent.TraceID).
+			SpanContext(mockEvent.SpanContext).
 			Version(2).
 			Context(context.Background()).
 			Payload(mockPayload))

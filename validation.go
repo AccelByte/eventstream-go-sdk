@@ -69,6 +69,7 @@ func validatePublishEvent(publishBuilder *PublishBuilder, strictValidation bool)
 			return errInvalidTraceID
 		}
 	}
+
 	return nil
 }
 

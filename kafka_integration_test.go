@@ -12,14 +12,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/mitchellh/mapstructure"
 	"github.com/stretchr/testify/assert"
 )
 
 const (
-	timeoutTest    = 120
+	timeoutTest    = 60
 	prefix         = "prefix"
 	testPayload    = "testPayload"
 	errorTimeout   = "timeout while executing test"
@@ -35,12 +33,13 @@ func createKafkaClient(t *testing.T) Client {
 	t.Helper()
 
 	config := &BrokerConfig{
-		LogMode:          OffLevel,
+		LogMode:          DebugLevel,
 		StrictValidation: true,
 	}
 
 	brokerList := []string{"localhost:9092"}
 	client, _ := NewClient(prefix, eventStreamKafka, brokerList, config)
+
 	return client
 }
 
@@ -54,36 +53,21 @@ func createInvalidKafkaClient(t *testing.T) Client {
 
 	brokerList := []string{"invalidbroker:9092"}
 	client, _ := NewClient(prefix, eventStreamKafka, brokerList, config)
+
 	return client
 }
 
 func constructTopicTest() string {
 	rand.Seed(time.Now().UnixNano())
-	return fmt.Sprintf("%s.%d", "testTopic", rand.Intn(1000))
-}
-
-func timeout(t *testing.T, timeoutChan chan bool) {
-	t.Helper()
-	timer := time.NewTimer(time.Duration(timeoutTest) * time.Second)
-	go func() {
-	loop:
-		for {
-			select {
-			case <-timer.C:
-				timeoutChan <- true
-				break loop
-			default:
-				break
-			}
-		}
-	}()
+	return fmt.Sprintf("%s.%d", "testTopic", rand.Intn(1000)) // nolint:gomnd
 }
 
 // nolint dupl
 func TestKafkaPubSubSuccess(t *testing.T) {
-	timeoutChan := make(chan bool, 1)
+	ctx, done := context.WithTimeout(context.Background(), time.Duration(timeoutTest)*time.Second)
+	defer done()
+
 	doneChan := make(chan bool, 1)
-	timeout(t, timeoutChan)
 
 	client := createKafkaClient(t)
 
@@ -92,20 +76,26 @@ func TestKafkaPubSubSuccess(t *testing.T) {
 	var mockPayload = make(map[string]interface{})
 	mockPayload[testPayload] = Payload{FriendID: "user456"}
 	mockEvent := &Event{
-		EventName: "testEvent",
-		Namespace: "event",
-		ClientID:  "7d480ce0e8624b02901bd80d9ba9817c",
-		TraceID:   "01c34ec3b07f4bfaa59ba0184a3de14d",
-		UserID:    "e95b150043ff4a2c88427a6eb25e5bc8",
-		Version:   defaultVersion,
-		Payload:   mockPayload,
+		EventName:   "testEvent",
+		Namespace:   "event",
+		ClientID:    "7d480ce0e8624b02901bd80d9ba9817c",
+		TraceID:     "01c34ec3b07f4bfaa59ba0184a3de14d",
+		SpanContext: "test-span-id",
+		UserID:      "e95b150043ff4a2c88427a6eb25e5bc8",
+		Version:     defaultVersion,
+		Payload:     mockPayload,
 	}
 
 	err := client.Register(
 		NewSubscribe().
 			Topic(topicName).
 			EventName(mockEvent.EventName).
+			Context(ctx).
 			Callback(func(event *Event, err error) {
+				if ctx.Err() != nil {
+					return
+				}
+
 				var eventPayload Payload
 				if err != nil {
 					assert.Fail(t, "error when run callback")
@@ -117,6 +107,7 @@ func TestKafkaPubSubSuccess(t *testing.T) {
 				assert.Equal(t, mockEvent.Namespace, event.Namespace, "namespace should be equal")
 				assert.Equal(t, mockEvent.ClientID, event.ClientID, "client ID should be equal")
 				assert.Equal(t, mockEvent.TraceID, event.TraceID, "trace ID should be equal")
+				assert.Equal(t, mockEvent.SpanContext, event.SpanContext, "span context should be equal")
 				assert.Equal(t, mockEvent.UserID, event.UserID, "user ID should be equal")
 				assert.Equal(t, mockEvent.SessionID, event.SessionID, "session ID should be equal")
 				assert.Equal(t, mockEvent.Version, event.Version, "version should be equal")
@@ -139,6 +130,7 @@ func TestKafkaPubSubSuccess(t *testing.T) {
 			UserID(mockEvent.UserID).
 			SessionID(mockEvent.SessionID).
 			TraceID(mockEvent.TraceID).
+			SpanContext(mockEvent.SpanContext).
 			Context(context.Background()).
 			Payload(mockPayload))
 	if err != nil {
@@ -146,21 +138,20 @@ func TestKafkaPubSubSuccess(t *testing.T) {
 		return
 	}
 
-	for {
-		select {
-		case <-doneChan:
-			return
-		case <-timeoutChan:
-			assert.FailNow(t, errorTimeout)
-		}
+	select {
+	case <-doneChan:
+		return
+	case <-ctx.Done():
+		assert.FailNow(t, errorTimeout)
 	}
 }
 
 // nolint dupl
 func TestKafkaPubFailed(t *testing.T) {
-	timeoutChan := make(chan bool, 1)
+	ctx, done := context.WithTimeout(context.Background(), time.Duration(timeoutTest)*time.Second)
+	defer done()
+
 	doneChan := make(chan bool, 1)
-	timeout(t, timeoutChan)
 
 	client := createInvalidKafkaClient(t)
 
@@ -169,13 +160,14 @@ func TestKafkaPubFailed(t *testing.T) {
 	var mockPayload = make(map[string]interface{})
 	mockPayload[testPayload] = Payload{FriendID: "user456"}
 	mockEvent := &Event{
-		EventName: "testEvent",
-		Namespace: "event",
-		ClientID:  "7d480ce0e8624b02901bd80d9ba9817c",
-		TraceID:   "01c34ec3b07f4bfaa59ba0184a3de14d",
-		UserID:    "e95b150043ff4a2c88427a6eb25e5bc8",
-		Version:   defaultVersion,
-		Payload:   mockPayload,
+		EventName:   "testEvent",
+		Namespace:   "event",
+		ClientID:    "7d480ce0e8624b02901bd80d9ba9817c",
+		TraceID:     "01c34ec3b07f4bfaa59ba0184a3de14d",
+		SpanContext: "test-span-context",
+		UserID:      "e95b150043ff4a2c88427a6eb25e5bc8",
+		Version:     defaultVersion,
+		Payload:     mockPayload,
 	}
 
 	errorCallback := func(event *Event, err error) {
@@ -184,6 +176,7 @@ func TestKafkaPubFailed(t *testing.T) {
 		assert.Equal(t, mockEvent.Namespace, event.Namespace, "namespace should be equal")
 		assert.Equal(t, mockEvent.ClientID, event.ClientID, "client ID should be equal")
 		assert.Equal(t, mockEvent.TraceID, event.TraceID, "trace ID should be equal")
+		assert.Equal(t, mockEvent.SpanContext, event.SpanContext, "span context should be equal")
 		assert.Equal(t, mockEvent.UserID, event.UserID, "user ID should be equal")
 		assert.Equal(t, mockEvent.SessionID, event.SessionID, "session ID should be equal")
 		assert.Equal(t, mockEvent.Version, event.Version, "version should be equal")
@@ -199,6 +192,7 @@ func TestKafkaPubFailed(t *testing.T) {
 			UserID(mockEvent.UserID).
 			SessionID(mockEvent.SessionID).
 			TraceID(mockEvent.TraceID).
+			SpanContext(mockEvent.SpanContext).
 			Context(context.Background()).
 			Payload(mockPayload).
 			ErrorCallback(errorCallback))
@@ -207,21 +201,20 @@ func TestKafkaPubFailed(t *testing.T) {
 		return
 	}
 
-	for {
-		select {
-		case <-doneChan:
-			return
-		case <-timeoutChan:
-			assert.FailNow(t, errorTimeout)
-		}
+	select {
+	case <-doneChan:
+		return
+	case <-ctx.Done():
+		assert.FailNow(t, errorTimeout)
 	}
 }
 
 // nolint dupl
 func TestKafkaPubSubMultipleTopicSuccess(t *testing.T) {
-	timeoutChan := make(chan bool, 1)
+	ctx, done := context.WithTimeout(context.Background(), time.Duration(timeoutTest)*time.Second)
+	defer done()
+
 	doneChan := make(chan bool, 2)
-	timeout(t, timeoutChan)
 
 	client := createKafkaClient(t)
 
@@ -230,21 +223,27 @@ func TestKafkaPubSubMultipleTopicSuccess(t *testing.T) {
 	var mockPayload = make(map[string]interface{})
 	mockPayload[testPayload] = Payload{FriendID: "user456"}
 	mockEvent := &Event{
-		EventName: "testEvent",
-		Namespace: "event",
-		ClientID:  "fe5bd0e3dc184d2d8ae0e09fcedf0f51",
-		TraceID:   "882da8cddd174d12af25da6310b47bd5",
-		UserID:    "48bf8a020b584f31bc605bf65d3300ed",
-		SessionID: "c1ab4f754acc4cb48a8f68dd25cfca21",
-		Version:   2,
-		Payload:   mockPayload,
+		EventName:   "testEvent",
+		Namespace:   "event",
+		ClientID:    "fe5bd0e3dc184d2d8ae0e09fcedf0f51",
+		TraceID:     "882da8cddd174d12af25da6310b47bd5",
+		SpanContext: "test-span-context",
+		UserID:      "48bf8a020b584f31bc605bf65d3300ed",
+		SessionID:   "c1ab4f754acc4cb48a8f68dd25cfca21",
+		Version:     2,
+		Payload:     mockPayload,
 	}
 
 	err := client.Register(
 		NewSubscribe().
 			Topic(topicName1).
 			EventName(mockEvent.EventName).
+			Context(ctx).
 			Callback(func(event *Event, err error) {
+				if ctx.Err() != nil {
+					return
+				}
+
 				var eventPayload Payload
 				if err != nil {
 					assert.Fail(t, "error when run callback 1")
@@ -256,6 +255,7 @@ func TestKafkaPubSubMultipleTopicSuccess(t *testing.T) {
 				assert.Equal(t, mockEvent.Namespace, event.Namespace, "namespace should be equal")
 				assert.Equal(t, mockEvent.ClientID, event.ClientID, "client ID should be equal")
 				assert.Equal(t, mockEvent.TraceID, event.TraceID, "trace ID should be equal")
+				assert.Equal(t, mockEvent.SpanContext, event.SpanContext, "span context should be equal")
 				assert.Equal(t, mockEvent.UserID, event.UserID, "user ID should be equal")
 				assert.Equal(t, mockEvent.SessionID, event.SessionID, "session ID should be equal")
 				assert.Equal(t, mockEvent.Version, event.Version, "version should be equal")
@@ -273,7 +273,12 @@ func TestKafkaPubSubMultipleTopicSuccess(t *testing.T) {
 		NewSubscribe().
 			Topic(topicName2).
 			EventName(mockEvent.EventName).
+			Context(ctx).
 			Callback(func(event *Event, err error) {
+				if ctx.Err() != nil {
+					return
+				}
+
 				var eventPayload Payload
 				if err != nil {
 					assert.Fail(t, "error when run callback 2")
@@ -285,6 +290,7 @@ func TestKafkaPubSubMultipleTopicSuccess(t *testing.T) {
 				assert.Equal(t, mockEvent.Namespace, event.Namespace, "namespace should be equal")
 				assert.Equal(t, mockEvent.ClientID, event.ClientID, "client ID should be equal")
 				assert.Equal(t, mockEvent.TraceID, event.TraceID, "trace ID should be equal")
+				assert.Equal(t, mockEvent.SpanContext, event.SpanContext, "span context should be equal")
 				assert.Equal(t, mockEvent.UserID, event.UserID, "user ID should be equal")
 				assert.Equal(t, mockEvent.SessionID, event.SessionID, "session ID should be equal")
 				assert.Equal(t, mockEvent.Version, event.Version, "version should be equal")
@@ -307,6 +313,7 @@ func TestKafkaPubSubMultipleTopicSuccess(t *testing.T) {
 			UserID(mockEvent.UserID).
 			SessionID(mockEvent.SessionID).
 			TraceID(mockEvent.TraceID).
+			SpanContext(mockEvent.SpanContext).
 			Version(2).
 			Context(context.Background()).
 			Payload(mockPayload))
@@ -323,7 +330,7 @@ func TestKafkaPubSubMultipleTopicSuccess(t *testing.T) {
 			if doneItr == 2 {
 				return
 			}
-		case <-timeoutChan:
+		case <-ctx.Done():
 			assert.FailNow(t, errorTimeout)
 		}
 	}
@@ -331,9 +338,10 @@ func TestKafkaPubSubMultipleTopicSuccess(t *testing.T) {
 
 // nolint dupl
 func TestKafkaPubSubDifferentGroupID(t *testing.T) {
-	timeoutChan := make(chan bool, 1)
+	ctx, done := context.WithTimeout(context.Background(), time.Duration(timeoutTest)*time.Second)
+	defer done()
+
 	doneChan := make(chan bool, 2)
-	timeout(t, timeoutChan)
 
 	client := createKafkaClient(t)
 
@@ -343,14 +351,15 @@ func TestKafkaPubSubDifferentGroupID(t *testing.T) {
 	var mockPayload = make(map[string]interface{})
 	mockPayload[testPayload] = Payload{FriendID: "user456"}
 	mockEvent := &Event{
-		EventName: "testEvent",
-		Namespace: "event",
-		ClientID:  "6ab512c877c64d06911b4772fede4dd1",
-		TraceID:   "2a44c482cd444f7cae29e90adb701315",
-		UserID:    "f13db76e044f43d988a2df1c7ea0000f",
-		SessionID: "77a0313e89a74c0684aacc1dc80329e6",
-		Version:   2,
-		Payload:   mockPayload,
+		EventName:   "testEvent",
+		Namespace:   "event",
+		ClientID:    "6ab512c877c64d06911b4772fede4dd1",
+		TraceID:     "2a44c482cd444f7cae29e90adb701315",
+		SpanContext: "test-span-context",
+		UserID:      "f13db76e044f43d988a2df1c7ea0000f",
+		SessionID:   "77a0313e89a74c0684aacc1dc80329e6",
+		Version:     2,
+		Payload:     mockPayload,
 	}
 
 	err := client.Register(
@@ -358,7 +367,12 @@ func TestKafkaPubSubDifferentGroupID(t *testing.T) {
 			Topic(topicName).
 			EventName(mockEvent.EventName).
 			GroupID(groupID).
+			Context(ctx).
 			Callback(func(event *Event, err error) {
+				if ctx.Err() != nil {
+					return
+				}
+
 				var eventPayload Payload
 				if err != nil {
 					assert.Fail(t, "error when run callback 1")
@@ -370,6 +384,7 @@ func TestKafkaPubSubDifferentGroupID(t *testing.T) {
 				assert.Equal(t, mockEvent.Namespace, event.Namespace, "namespace should be equal")
 				assert.Equal(t, mockEvent.ClientID, event.ClientID, "client ID should be equal")
 				assert.Equal(t, mockEvent.TraceID, event.TraceID, "trace ID should be equal")
+				assert.Equal(t, mockEvent.SpanContext, event.SpanContext, "span context should be equal")
 				assert.Equal(t, mockEvent.UserID, event.UserID, "user ID should be equal")
 				assert.Equal(t, mockEvent.SessionID, event.SessionID, "session ID should be equal")
 				assert.Equal(t, mockEvent.Version, event.Version, "version should be equal")
@@ -388,7 +403,12 @@ func TestKafkaPubSubDifferentGroupID(t *testing.T) {
 			Topic(topicName).
 			EventName(mockEvent.EventName).
 			GroupID(groupID2).
+			Context(ctx).
 			Callback(func(event *Event, err error) {
+				if ctx.Err() != nil {
+					return
+				}
+
 				var eventPayload Payload
 				if err != nil {
 					assert.Fail(t, "error when run callback 2")
@@ -400,6 +420,7 @@ func TestKafkaPubSubDifferentGroupID(t *testing.T) {
 				assert.Equal(t, mockEvent.Namespace, event.Namespace, "namespace should be equal")
 				assert.Equal(t, mockEvent.ClientID, event.ClientID, "client ID should be equal")
 				assert.Equal(t, mockEvent.TraceID, event.TraceID, "trace ID should be equal")
+				assert.Equal(t, mockEvent.SpanContext, event.SpanContext, "span context should be equal")
 				assert.Equal(t, mockEvent.UserID, event.UserID, "user ID should be equal")
 				assert.Equal(t, mockEvent.SessionID, event.SessionID, "session ID should be equal")
 				assert.Equal(t, mockEvent.Version, event.Version, "version should be equal")
@@ -422,6 +443,7 @@ func TestKafkaPubSubDifferentGroupID(t *testing.T) {
 			UserID(mockEvent.UserID).
 			SessionID(mockEvent.SessionID).
 			TraceID(mockEvent.TraceID).
+			SpanContext(mockEvent.SpanContext).
 			Version(2).
 			Context(context.Background()).
 			Payload(mockPayload))
@@ -431,25 +453,23 @@ func TestKafkaPubSubDifferentGroupID(t *testing.T) {
 	}
 
 	doneItr := 0
-	for {
-		select {
-		case <-doneChan:
-			doneItr++
-			if doneItr == 2 {
-				return
-			}
-		case <-timeoutChan:
-			assert.FailNow(t, errorTimeout)
+	select {
+	case <-doneChan:
+		doneItr++
+		if doneItr == 2 {
+			return
 		}
+	case <-ctx.Done():
+		assert.FailNow(t, errorTimeout)
 	}
 }
 
 // nolint dupl
 func TestKafkaPubSubSameGroupID(t *testing.T) {
-	logrus.SetLevel(logrus.DebugLevel)
-	timeoutChan := make(chan bool, 1)
+	ctx, done := context.WithTimeout(context.Background(), time.Duration(timeoutTest)*time.Second)
+	defer done()
+
 	doneChan := make(chan bool, 1)
-	timeout(t, timeoutChan)
 
 	client := createKafkaClient(t)
 
@@ -459,13 +479,14 @@ func TestKafkaPubSubSameGroupID(t *testing.T) {
 	var mockPayload = make(map[string]interface{})
 	mockPayload[testPayload] = Payload{FriendID: "user456"}
 	mockEvent := &Event{
-		EventName: "testEvent",
-		Namespace: "event",
-		ClientID:  "269b3ade83dd45ebbb896609bf10fe03",
-		TraceID:   "b4a410fb53d2448b8648ba0c58f09ce4",
-		UserID:    "71895627426741148ad2d85399c53d71",
-		Version:   2,
-		Payload:   mockPayload,
+		EventName:   "testEvent",
+		Namespace:   "event",
+		ClientID:    "269b3ade83dd45ebbb896609bf10fe03",
+		TraceID:     "b4a410fb53d2448b8648ba0c58f09ce4",
+		SpanContext: "test-span-context",
+		UserID:      "71895627426741148ad2d85399c53d71",
+		Version:     2,
+		Payload:     mockPayload,
 	}
 
 	err := client.Register(
@@ -473,7 +494,12 @@ func TestKafkaPubSubSameGroupID(t *testing.T) {
 			Topic(topicName).
 			EventName(mockEvent.EventName).
 			GroupID(groupID).
+			Context(ctx).
 			Callback(func(event *Event, err error) {
+				if ctx.Err() != nil {
+					return
+				}
+
 				var eventPayload Payload
 				if err != nil {
 					assert.Fail(t, "error when run callback 1")
@@ -485,6 +511,7 @@ func TestKafkaPubSubSameGroupID(t *testing.T) {
 				assert.Equal(t, mockEvent.Namespace, event.Namespace, "namespace should be equal")
 				assert.Equal(t, mockEvent.ClientID, event.ClientID, "client ID should be equal")
 				assert.Equal(t, mockEvent.TraceID, event.TraceID, "trace ID should be equal")
+				assert.Equal(t, mockEvent.SpanContext, event.SpanContext, "span context should be equal")
 				assert.Equal(t, mockEvent.UserID, event.UserID, "user ID should be equal")
 				assert.Equal(t, mockEvent.SessionID, event.SessionID, "session ID should be equal")
 				assert.Equal(t, mockEvent.Version, event.Version, "version should be equal")
@@ -503,7 +530,12 @@ func TestKafkaPubSubSameGroupID(t *testing.T) {
 			Topic(topicName).
 			EventName(mockEvent.EventName).
 			GroupID(groupID).
+			Context(ctx).
 			Callback(func(event *Event, err error) {
+				if ctx.Err() != nil {
+					return
+				}
+
 				var eventPayload Payload
 				if err != nil {
 					assert.Fail(t, "error when run callback 2")
@@ -515,6 +547,7 @@ func TestKafkaPubSubSameGroupID(t *testing.T) {
 				assert.Equal(t, mockEvent.Namespace, event.Namespace, "namespace should be equal")
 				assert.Equal(t, mockEvent.ClientID, event.ClientID, "client ID should be equal")
 				assert.Equal(t, mockEvent.TraceID, event.TraceID, "trace ID should be equal")
+				assert.Equal(t, mockEvent.SpanContext, event.SpanContext, "span context should be equal")
 				assert.Equal(t, mockEvent.UserID, event.UserID, "user ID should be equal")
 				assert.Equal(t, mockEvent.SessionID, event.SessionID, "session ID should be equal")
 				assert.Equal(t, mockEvent.Version, event.Version, "version should be equal")
@@ -537,6 +570,7 @@ func TestKafkaPubSubSameGroupID(t *testing.T) {
 			UserID(mockEvent.UserID).
 			SessionID(mockEvent.SessionID).
 			TraceID(mockEvent.TraceID).
+			SpanContext(mockEvent.SpanContext).
 			Version(2).
 			Context(context.Background()).
 			Payload(mockPayload))
@@ -545,20 +579,20 @@ func TestKafkaPubSubSameGroupID(t *testing.T) {
 		return
 	}
 
-	for {
-		select {
-		case <-doneChan:
-			return
-		case <-timeoutChan:
-			assert.FailNow(t, errorTimeout)
-		}
+	select {
+	case <-doneChan:
+		return
+	case <-ctx.Done():
+		assert.FailNow(t, errorTimeout)
 	}
 }
 
+// nolint:funlen
 func TestKafkaRegisterMultipleSubscriberCallbackSuccess(t *testing.T) {
-	timeoutChan := make(chan bool, 1)
+	ctx, done := context.WithTimeout(context.Background(), time.Duration(timeoutTest)*time.Second)
+	defer done()
+
 	doneChan := make(chan bool, 1)
-	timeout(t, timeoutChan)
 
 	client := createKafkaClient(t)
 
@@ -567,20 +601,26 @@ func TestKafkaRegisterMultipleSubscriberCallbackSuccess(t *testing.T) {
 	var mockPayload = make(map[string]interface{})
 	mockPayload[testPayload] = "testPayload"
 	mockEvent := &Event{
-		EventName: "testEvent",
-		Namespace: "event",
-		ClientID:  "7d480ce0e8624b02901bd80d9ba9817c",
-		TraceID:   "01c34ec3b07f4bfaa59ba0184a3de14d",
-		UserID:    "e95b150043ff4a2c88427a6eb25e5bc8",
-		Version:   defaultVersion,
-		Payload:   mockPayload,
+		EventName:   "testEvent",
+		Namespace:   "event",
+		ClientID:    "7d480ce0e8624b02901bd80d9ba9817c",
+		TraceID:     "01c34ec3b07f4bfaa59ba0184a3de14d",
+		SpanContext: "test-span-context",
+		UserID:      "e95b150043ff4a2c88427a6eb25e5bc8",
+		Version:     defaultVersion,
+		Payload:     mockPayload,
 	}
 
 	err := client.Register(
 		NewSubscribe().
 			Topic(topicName).
 			EventName(mockEvent.EventName).
+			Context(ctx).
 			Callback(func(_ *Event, err error) {
+				if ctx.Err() != nil {
+					return
+				}
+
 				assert.NoError(t, err, "there's error right before event consumed: %v", err)
 				doneChan <- true
 			}))
@@ -593,7 +633,12 @@ func TestKafkaRegisterMultipleSubscriberCallbackSuccess(t *testing.T) {
 		NewSubscribe().
 			Topic("anotherevent").
 			EventName(mockEvent.EventName).
+			Context(ctx).
 			Callback(func(_ *Event, err error) {
+				if ctx.Err() != nil {
+					return
+				}
+
 				assert.NoError(t, err, "there's error right before event consumed: %v", err)
 				// just to test subscriber, no need any  action here
 				doneChan <- true
@@ -612,6 +657,7 @@ func TestKafkaRegisterMultipleSubscriberCallbackSuccess(t *testing.T) {
 			UserID(mockEvent.UserID).
 			SessionID(mockEvent.SessionID).
 			TraceID(mockEvent.TraceID).
+			SpanContext(mockEvent.SpanContext).
 			Context(context.Background()).
 			Payload(mockPayload))
 	if err != nil {
@@ -623,7 +669,7 @@ func TestKafkaRegisterMultipleSubscriberCallbackSuccess(t *testing.T) {
 		select {
 		case <-doneChan:
 			return
-		case <-timeoutChan:
+		case <-ctx.Done():
 			assert.FailNow(t, errorTimeout)
 		}
 	}
