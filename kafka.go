@@ -33,6 +33,7 @@ import (
 const (
 	defaultReaderSize = 10e6 // 10MB
 	maxBackOffCount   = 3
+	kafkaMaxWait      = time.Second
 )
 
 var (
@@ -253,6 +254,7 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 		config.Topic = topic
 		config.GroupID = groupID
 		config.StartOffset = kafka.LastOffset
+		config.MaxWait = kafkaMaxWait
 		reader := kafka.NewReader(config)
 		defer func() {
 			_ = reader.Close()

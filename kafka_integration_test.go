@@ -12,8 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/mitchellh/mapstructure"
 	"github.com/stretchr/testify/assert"
 )
@@ -62,20 +60,12 @@ func constructTopicTest() string {
 	return fmt.Sprintf("%s.%d", "testTopic", rand.Intn(1000))
 }
 
-func timeout(t *testing.T, timeoutChan chan bool) {
-	t.Helper()
-	timer := time.NewTimer(time.Duration(timeoutTest) * time.Second)
-	go func() {
-		<-timer.C
-		close(timeoutChan)
-	}()
-}
-
 // nolint dupl
 func TestKafkaPubSubSuccess(t *testing.T) {
-	timeoutChan := make(chan bool, 1)
+	ctx, done := context.WithTimeout(context.Background(), time.Duration(timeoutTest)*time.Second)
+	defer done()
+
 	doneChan := make(chan bool, 1)
-	timeout(t, timeoutChan)
 
 	client := createKafkaClient(t)
 
@@ -98,7 +88,12 @@ func TestKafkaPubSubSuccess(t *testing.T) {
 		NewSubscribe().
 			Topic(topicName).
 			EventName(mockEvent.EventName).
+			Context(ctx).
 			Callback(func(event *Event, err error) {
+				if ctx.Err() != nil {
+					return
+				}
+
 				var eventPayload Payload
 				if err != nil {
 					assert.Fail(t, "error when run callback")
@@ -141,21 +136,20 @@ func TestKafkaPubSubSuccess(t *testing.T) {
 		return
 	}
 
-	for {
-		select {
-		case <-doneChan:
-			return
-		case <-timeoutChan:
-			assert.FailNow(t, errorTimeout)
-		}
+	select {
+	case <-doneChan:
+		return
+	case <-ctx.Done():
+		assert.FailNow(t, errorTimeout)
 	}
 }
 
 // nolint dupl
 func TestKafkaPubFailed(t *testing.T) {
-	timeoutChan := make(chan bool, 1)
+	ctx, done := context.WithTimeout(context.Background(), time.Duration(timeoutTest)*time.Second)
+	defer done()
+
 	doneChan := make(chan bool, 1)
-	timeout(t, timeoutChan)
 
 	client := createInvalidKafkaClient(t)
 
@@ -205,21 +199,20 @@ func TestKafkaPubFailed(t *testing.T) {
 		return
 	}
 
-	for {
-		select {
-		case <-doneChan:
-			return
-		case <-timeoutChan:
-			assert.FailNow(t, errorTimeout)
-		}
+	select {
+	case <-doneChan:
+		return
+	case <-ctx.Done():
+		assert.FailNow(t, errorTimeout)
 	}
 }
 
 // nolint dupl
 func TestKafkaPubSubMultipleTopicSuccess(t *testing.T) {
-	timeoutChan := make(chan bool, 1)
+	ctx, done := context.WithTimeout(context.Background(), time.Duration(timeoutTest)*time.Second)
+	defer done()
+
 	doneChan := make(chan bool, 2)
-	timeout(t, timeoutChan)
 
 	client := createKafkaClient(t)
 
@@ -243,7 +236,12 @@ func TestKafkaPubSubMultipleTopicSuccess(t *testing.T) {
 		NewSubscribe().
 			Topic(topicName1).
 			EventName(mockEvent.EventName).
+			Context(ctx).
 			Callback(func(event *Event, err error) {
+				if ctx.Err() != nil {
+					return
+				}
+
 				var eventPayload Payload
 				if err != nil {
 					assert.Fail(t, "error when run callback 1")
@@ -273,7 +271,12 @@ func TestKafkaPubSubMultipleTopicSuccess(t *testing.T) {
 		NewSubscribe().
 			Topic(topicName2).
 			EventName(mockEvent.EventName).
+			Context(ctx).
 			Callback(func(event *Event, err error) {
+				if ctx.Err() != nil {
+					return
+				}
+
 				var eventPayload Payload
 				if err != nil {
 					assert.Fail(t, "error when run callback 2")
@@ -325,7 +328,7 @@ func TestKafkaPubSubMultipleTopicSuccess(t *testing.T) {
 			if doneItr == 2 {
 				return
 			}
-		case <-timeoutChan:
+		case <-ctx.Done():
 			assert.FailNow(t, errorTimeout)
 		}
 	}
@@ -333,9 +336,10 @@ func TestKafkaPubSubMultipleTopicSuccess(t *testing.T) {
 
 // nolint dupl
 func TestKafkaPubSubDifferentGroupID(t *testing.T) {
-	timeoutChan := make(chan bool, 1)
+	ctx, done := context.WithTimeout(context.Background(), time.Duration(timeoutTest)*time.Second)
+	defer done()
+
 	doneChan := make(chan bool, 2)
-	timeout(t, timeoutChan)
 
 	client := createKafkaClient(t)
 
@@ -361,7 +365,12 @@ func TestKafkaPubSubDifferentGroupID(t *testing.T) {
 			Topic(topicName).
 			EventName(mockEvent.EventName).
 			GroupID(groupID).
+			Context(ctx).
 			Callback(func(event *Event, err error) {
+				if ctx.Err() != nil {
+					return
+				}
+
 				var eventPayload Payload
 				if err != nil {
 					assert.Fail(t, "error when run callback 1")
@@ -392,7 +401,12 @@ func TestKafkaPubSubDifferentGroupID(t *testing.T) {
 			Topic(topicName).
 			EventName(mockEvent.EventName).
 			GroupID(groupID2).
+			Context(ctx).
 			Callback(func(event *Event, err error) {
+				if ctx.Err() != nil {
+					return
+				}
+
 				var eventPayload Payload
 				if err != nil {
 					assert.Fail(t, "error when run callback 2")
@@ -437,25 +451,23 @@ func TestKafkaPubSubDifferentGroupID(t *testing.T) {
 	}
 
 	doneItr := 0
-	for {
-		select {
-		case <-doneChan:
-			doneItr++
-			if doneItr == 2 {
-				return
-			}
-		case <-timeoutChan:
-			assert.FailNow(t, errorTimeout)
+	select {
+	case <-doneChan:
+		doneItr++
+		if doneItr == 2 {
+			return
 		}
+	case <-ctx.Done():
+		assert.FailNow(t, errorTimeout)
 	}
 }
 
 // nolint dupl
 func TestKafkaPubSubSameGroupID(t *testing.T) {
-	logrus.SetLevel(logrus.DebugLevel)
-	timeoutChan := make(chan bool, 1)
+	ctx, done := context.WithTimeout(context.Background(), time.Duration(timeoutTest)*time.Second)
+	defer done()
+
 	doneChan := make(chan bool, 1)
-	timeout(t, timeoutChan)
 
 	client := createKafkaClient(t)
 
@@ -480,7 +492,12 @@ func TestKafkaPubSubSameGroupID(t *testing.T) {
 			Topic(topicName).
 			EventName(mockEvent.EventName).
 			GroupID(groupID).
+			Context(ctx).
 			Callback(func(event *Event, err error) {
+				if ctx.Err() != nil {
+					return
+				}
+
 				var eventPayload Payload
 				if err != nil {
 					assert.Fail(t, "error when run callback 1")
@@ -511,7 +528,12 @@ func TestKafkaPubSubSameGroupID(t *testing.T) {
 			Topic(topicName).
 			EventName(mockEvent.EventName).
 			GroupID(groupID).
+			Context(ctx).
 			Callback(func(event *Event, err error) {
+				if ctx.Err() != nil {
+					return
+				}
+
 				var eventPayload Payload
 				if err != nil {
 					assert.Fail(t, "error when run callback 2")
@@ -555,20 +577,19 @@ func TestKafkaPubSubSameGroupID(t *testing.T) {
 		return
 	}
 
-	for {
-		select {
-		case <-doneChan:
-			return
-		case <-timeoutChan:
-			assert.FailNow(t, errorTimeout)
-		}
+	select {
+	case <-doneChan:
+		return
+	case <-ctx.Done():
+		assert.FailNow(t, errorTimeout)
 	}
 }
 
 func TestKafkaRegisterMultipleSubscriberCallbackSuccess(t *testing.T) {
-	timeoutChan := make(chan bool, 1)
+	ctx, done := context.WithTimeout(context.Background(), time.Duration(timeoutTest)*time.Second)
+	defer done()
+
 	doneChan := make(chan bool, 1)
-	timeout(t, timeoutChan)
 
 	client := createKafkaClient(t)
 
@@ -591,7 +612,12 @@ func TestKafkaRegisterMultipleSubscriberCallbackSuccess(t *testing.T) {
 		NewSubscribe().
 			Topic(topicName).
 			EventName(mockEvent.EventName).
+			Context(ctx).
 			Callback(func(_ *Event, err error) {
+				if ctx.Err() != nil {
+					return
+				}
+
 				assert.NoError(t, err, "there's error right before event consumed: %v", err)
 				doneChan <- true
 			}))
@@ -604,7 +630,12 @@ func TestKafkaRegisterMultipleSubscriberCallbackSuccess(t *testing.T) {
 		NewSubscribe().
 			Topic("anotherevent").
 			EventName(mockEvent.EventName).
+			Context(ctx).
 			Callback(func(_ *Event, err error) {
+				if ctx.Err() != nil {
+					return
+				}
+
 				assert.NoError(t, err, "there's error right before event consumed: %v", err)
 				// just to test subscriber, no need any  action here
 				doneChan <- true
@@ -635,7 +666,7 @@ func TestKafkaRegisterMultipleSubscriberCallbackSuccess(t *testing.T) {
 		select {
 		case <-doneChan:
 			return
-		case <-timeoutChan:
+		case <-ctx.Done():
 			assert.FailNow(t, errorTimeout)
 		}
 	}
