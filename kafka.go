@@ -61,13 +61,14 @@ type KafkaClient struct {
 }
 
 func setConfig(writerConfig *kafka.WriterConfig, readerConfig *kafka.ReaderConfig, config *BrokerConfig) {
-
 	if config.ReadTimeout != 0 {
 		writerConfig.ReadTimeout = config.WriteTimeout
 	}
+
 	if config.WriteTimeout != 0 {
 		writerConfig.WriteTimeout = config.WriteTimeout
 	}
+
 	if config.DialTimeout != 0 {
 		dialer := &kafka.Dialer{
 			Timeout: config.DialTimeout,
@@ -75,6 +76,7 @@ func setConfig(writerConfig *kafka.WriterConfig, readerConfig *kafka.ReaderConfi
 		writerConfig.Dialer = dialer
 		readerConfig.Dialer = dialer
 	}
+
 	setLogLevel(config.LogMode)
 }
 
@@ -95,7 +97,6 @@ func setLogLevel(logMode string) {
 
 // newKafkaClient create a new instance of KafkaClient
 func newKafkaClient(brokers []string, prefix string, config ...*BrokerConfig) *KafkaClient {
-
 	log.Info("create new kafka client")
 
 	writerConfig := &kafka.WriterConfig{
@@ -111,6 +112,7 @@ func newKafkaClient(brokers []string, prefix string, config ...*BrokerConfig) *K
 	// set client configuration
 	// only uses first KafkaConfig arguments
 	var strictValidation bool
+
 	if len(config) > 0 {
 		setConfig(writerConfig, readerConfig, config[0])
 		strictValidation = config[0].StrictValidation
@@ -145,8 +147,10 @@ func (client *KafkaClient) Publish(publishBuilder *PublishBuilder) error {
 	}
 
 	config := client.publishConfig
+
 	for _, pubTopic := range publishBuilder.topic {
 		topic := pubTopic
+
 		go func() {
 			err = backoff.RetryNotify(func() error {
 				return client.publishEvent(publishBuilder.ctx, topic, publishBuilder.eventName, config, message)
@@ -157,28 +161,32 @@ func (client *KafkaClient) Publish(publishBuilder *PublishBuilder) error {
 			if err != nil {
 				log.Errorf("unable to publish event. topic: %s , event: %s , error: %v", topic,
 					publishBuilder.eventName, err)
+
 				if publishBuilder.errorCallback != nil {
 					publishBuilder.errorCallback(event, err)
 				}
+
 				return
 			}
+
 			log.Debugf("successfully publish event %s into topic %s", publishBuilder.eventName,
 				topic)
 		}()
 	}
+
 	return nil
 }
 
 // Publish send event to a topic
 func (client *KafkaClient) publishEvent(ctx context.Context, topic, eventName string, config kafka.WriterConfig,
 	message kafka.Message) error {
-
 	topicName := constructTopic(client.prefix, topic)
 	log.Debugf("publish event %s into topic %s", eventName,
 		topicName)
 
 	config.Topic = topicName
 	writer := kafka.NewWriter(config)
+
 	defer func() {
 		_ = writer.Close()
 	}()
@@ -188,6 +196,7 @@ func (client *KafkaClient) publishEvent(ctx context.Context, topic, eventName st
 		log.Errorf("unable to publish event to kafka. topic: %s , error: %v", topicName, err)
 		return fmt.Errorf("unable to publish event to kafka. topic: %s , error: %v", topicName, err)
 	}
+
 	return nil
 }
 
@@ -218,7 +227,6 @@ func constructEvent(publishBuilder *PublishBuilder) (kafka.Message, *Event, erro
 		Key:   []byte(id),
 		Value: eventBytes,
 	}, event, nil
-
 }
 
 // Register register callback function and then subscribe topic
@@ -227,6 +235,7 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 		log.Error(errSubNilEvent)
 		return errSubNilEvent
 	}
+
 	log.Debugf("register callback to consume topic %s , event: %s", subscribeBuilder.topic,
 		subscribeBuilder.eventName)
 
@@ -239,6 +248,7 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 	go func() {
 		topic := constructTopic(client.prefix, subscribeBuilder.topic)
 		groupID := constructGroupID(subscribeBuilder.groupID)
+
 		isRegistered, err := client.registerCallback(topic, subscribeBuilder.eventName, subscribeBuilder.callback)
 		if err != nil {
 			log.Errorf("unable to register callback. error: %v", err)
@@ -256,6 +266,7 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 		config.StartOffset = kafka.LastOffset
 		config.MaxWait = kafkaMaxWait
 		reader := kafka.NewReader(config)
+
 		defer func() {
 			_ = reader.Close()
 		}()
@@ -266,16 +277,17 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 				log.Error("unable to subscribe topic from kafka. error: ", err)
 				return
 			}
+
 			go client.processMessage(consumerMessage, groupID)
 		}
 	}()
+
 	return nil
 }
 
 // registerCallback add callback to map with topic and eventName as a key
 func (client *KafkaClient) registerCallback(topic, eventName string, callback func(event *Event, err error)) (
 	isRegistered bool, err error) {
-
 	if innerMap, ok := client.subscribeMap.Load(topic); ok {
 		innerValue, ok := innerMap.(*sync.Map)
 		if !ok {
@@ -290,13 +302,16 @@ func (client *KafkaClient) registerCallback(topic, eventName string, callback fu
 		if innerValue != nil {
 			innerValue.Store(eventName, callback)
 			client.subscribeMap.Store(topic, innerValue)
+
 			return false, nil
 		}
 	}
 
 	var callbackMap = &sync.Map{}
+
 	callbackMap.Store(eventName, callback)
 	client.subscribeMap.Store(topic, callbackMap)
+
 	return false, nil
 }
 
@@ -309,16 +324,19 @@ func (client *KafkaClient) processMessage(message kafka.Message, groupID string)
 		log.Error("unable to unmarshal message from subscribe in kafka. error: ", err)
 		return
 	}
+
 	client.runCallback(event, message, groupID)
 }
 
 // unmarshal unmarshal received message into event struct
 func unmarshal(message kafka.Message) (*Event, error) {
 	var event Event
+
 	err := json.Unmarshal(message.Value, &event)
 	if err != nil {
 		return &Event{}, err
 	}
+
 	return &event, nil
 }
 
@@ -351,6 +369,7 @@ func (client *KafkaClient) runCallback(event *Event, consumerMessage kafka.Messa
 
 	log.Debugf("run callback for topic: %s , event name: %s, groupID: %s", consumerMessage.Topic,
 		event.EventName, groupID)
+
 	go callback(&Event{
 		ID:          event.ID,
 		ClientID:    event.ClientID,

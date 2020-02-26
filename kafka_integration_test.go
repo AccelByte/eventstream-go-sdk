@@ -39,6 +39,7 @@ func createKafkaClient(t *testing.T) Client {
 
 	brokerList := []string{"localhost:9092"}
 	client, _ := NewClient(prefix, eventStreamKafka, brokerList, config)
+
 	return client
 }
 
@@ -52,12 +53,13 @@ func createInvalidKafkaClient(t *testing.T) Client {
 
 	brokerList := []string{"invalidbroker:9092"}
 	client, _ := NewClient(prefix, eventStreamKafka, brokerList, config)
+
 	return client
 }
 
 func constructTopicTest() string {
 	rand.Seed(time.Now().UnixNano())
-	return fmt.Sprintf("%s.%d", "testTopic", rand.Intn(1000))
+	return fmt.Sprintf("%s.%d", "testTopic", rand.Intn(1000)) // nolint:gomnd
 }
 
 // nolint dupl
@@ -585,6 +587,7 @@ func TestKafkaPubSubSameGroupID(t *testing.T) {
 	}
 }
 
+// nolint:funlen
 func TestKafkaRegisterMultipleSubscriberCallbackSuccess(t *testing.T) {
 	ctx, done := context.WithTimeout(context.Background(), time.Duration(timeoutTest)*time.Second)
 	defer done()
