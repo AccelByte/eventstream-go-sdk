@@ -41,26 +41,49 @@ func TestStdoutPublish(t *testing.T) {
 
 	var mockPayload = make(map[string]interface{})
 	mockPayload[testPayload] = Payload{FriendID: "user456"}
+
+	mockAdditionalFields := map[string]interface{}{
+		"summary": "user:_failed",
+	}
+
 	mockEvent := struct {
-		ID          string      `json:"id"`
-		EventName   string      `json:"name"`
-		Namespace   string      `json:"namespace"`
-		ClientID    string      `json:"clientId"`
-		TraceID     string      `json:"traceId"`
-		SpanContext string      `json:"spanContext"`
-		UserID      string      `json:"userId"`
-		Timestamp   time.Time   `json:"timestamp"`
-		Version     string      `json:"version"`
-		Payload     interface{} `json:"payload"`
+		ID               string                 `json:"id"`
+		EventName        string                 `json:"name"`
+		Namespace        string                 `json:"namespace"`
+		ClientID         string                 `json:"clientId"`
+		TraceID          string                 `json:"traceId"`
+		SpanContext      string                 `json:"spanContext"`
+		UserID           string                 `json:"userId"`
+		Timestamp        time.Time              `json:"timestamp"`
+		EventID          int                    `json:"event_id"`
+		EventType        int                    `json:"event_type"`
+		EventLevel       int                    `json:"event_level"`
+		ServiceName      string                 `json:"service"`
+		ClientIDs        []string               `json:"client_ids"`
+		TargetUserIDs    []string               `json:"target_user_ids"`
+		TargetNamespace  string                 `json:"namespace"`
+		Privacy          bool                   `json:"privacy"`
+		AdditionalFields map[string]interface{} `json:"additional_fields,omitempty"`
+		Version          string                 `json:"version"`
+		Payload          interface{}            `json:"payload"`
 	}{
-		EventName:   "testEvent",
-		Namespace:   "event",
-		ClientID:    "client123",
-		TraceID:     "trace123",
-		SpanContext: "span123",
-		UserID:      "user123",
-		Version:     "0.1.0",
-		Payload:     mockPayload,
+		EventName:        "testEvent",
+		Namespace:        "event",
+		ClientID:         "client123",
+		TraceID:          "trace123",
+		SpanContext:      "span123",
+		UserID:           "user123",
+		EventID:          3,
+		EventType:        301,
+		EventLevel:       3,
+		ServiceName:      "test",
+		ClientIDs:        []string{"7d480ce0e8624b02901bd80d9ba9817c"},
+		TargetUserIDs:    []string{"1fe7f425a0e049d29d87ca3d32e45b5a"},
+		TargetNamespace:  "publisher",
+		Privacy:          true,
+		AdditionalFields: mockAdditionalFields,
+		Version:          "0.1.0",
+		Payload:          mockPayload,
 	}
 
 	err := client.Publish(
@@ -71,6 +94,15 @@ func TestStdoutPublish(t *testing.T) {
 			Namespace(mockEvent.Namespace).
 			ClientID(mockEvent.ClientID).
 			UserID(mockEvent.UserID).
+			EventID(mockEvent.EventID).
+			EventType(mockEvent.EventType).
+			EventLevel(mockEvent.EventLevel).
+			ServiceName(mockEvent.ServiceName).
+			ClientIDs(mockEvent.ClientIDs).
+			TargetUserIDs(mockEvent.TargetUserIDs).
+			TargetNamespace(mockEvent.TargetNamespace).
+			Privacy(mockEvent.Privacy).
+			AdditionalFields(mockEvent.AdditionalFields).
 			Payload(mockPayload))
 	require.NoError(t, err)
 }
