@@ -89,6 +89,15 @@ err := client.Publish(
 			TraceID(TraceID).
 			SpanContext(SpanContext).
 			Context(Context).
+			EventID(eventID int).
+			EventType(eventType int).
+			EventLevel(eventLevel int).
+			ServiceName(serviceName string).
+			ClientIDs(clientIDs []string).
+			TargetUserIDs(targetUserIDs []string).
+			TargetNamespace(targetNamespace string).
+			Privacy(privacy bool).
+			AdditionalFields(additionalFields map[string]interface{}).
 			Version(Version).
 			Payload(Payload).
 			ErrorCallback(func(event *Event, err error) {}))
@@ -104,6 +113,15 @@ err := client.Publish(
 * SpanContext : Opentracing Jaeger Span Context(string - optional)
 * Context : Golang context. (context - default: context.background)
 * Version : Version of schema. (integer - default: `1`)
+* EventID : Event ID. Used by GDPR service. (integer)
+* EventType : Event Type. Used by GDPR service. (integer)
+* EventLevel : Event Level. Used by GDPR service. (integer)
+* ServiceName : Service Name. Used by GDPR service. (string)
+* ClientIDs : List of client IDs. Used by GDPR service. ([]string - UUID v4 without Hyphens)
+* TargetUserIDs : List of target client IDs. Used by GDPR service. ([]string - UUID v4 without Hyphens)
+* TargetNamespace : Target Namespace. Used by GDPR service. (string)
+* Privacy : Privacy. Used by GDPR service. (bool)
+* AdditionalFields : Additional fields. Used by GDPR service. (map[string]interface{})
 * Payload : Additional attribute. (map[string]interface{})
 * ErrorCallback : Callback function when event failed to publish. (func(event *Event, err error){})
 
@@ -147,6 +165,15 @@ Event message format :
 * userId : Publisher user ID (string - UUID v4 without Hyphens)
 * sessionId : Publisher session ID (string - UUID v4 without Hyphens)
 * timestamp : Event time (time.Time)
+* event_id : Event id used by GDPR service. (integer)
+* event_type : Event type used by GDPR service. (integer)
+* event_level : Event level used by GDPR service. (integer)
+* service : Service name used by GDPR service. (string)
+* client_ids : Client IDs used by GDPR service. ([]string - UUID v4 without Hyphens)
+* target_user_ids : Target user IDs used by GDPR service. ([]string - UUID v4 without Hyphens)
+* target_namespace : Target namespace used by GDPR service. (string)
+* privacy : Privacy used by GDPR service. (bool)
+* additional_fields : Set of data / object that given by producer. Each data have own key for specific purpose. Used by GDPR service. (map[string]interface{}) 
 * version : Event schema version (integer)
 * payload : Set of data / object that given by producer. Each data have own key for specific purpose. (map[string]interface{})
 
