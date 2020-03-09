@@ -32,6 +32,7 @@ func TestNewStdoutClient(t *testing.T) {
 	assert.Equal(t, expectedClient, client, "client should be equal")
 }
 
+// nolint:funlen
 func TestStdoutPublish(t *testing.T) {
 	client := StdoutClient{
 		prefix: "test",
@@ -61,7 +62,7 @@ func TestStdoutPublish(t *testing.T) {
 		ServiceName      string                 `json:"service"`
 		ClientIDs        []string               `json:"client_ids"`
 		TargetUserIDs    []string               `json:"target_user_ids"`
-		TargetNamespace  string                 `json:"namespace"`
+		TargetNamespace  string                 `json:"target_namespace"`
 		Privacy          bool                   `json:"privacy"`
 		AdditionalFields map[string]interface{} `json:"additional_fields,omitempty"`
 		Version          string                 `json:"version"`
@@ -73,9 +74,9 @@ func TestStdoutPublish(t *testing.T) {
 		TraceID:          "trace123",
 		SpanContext:      "span123",
 		UserID:           "user123",
-		EventID:          3,
-		EventType:        301,
-		EventLevel:       3,
+		EventID:          3,   // nolint:gomnd
+		EventType:        301, // nolint:gomnd
+		EventLevel:       3,   // nolint:gomnd
 		ServiceName:      "test",
 		ClientIDs:        []string{"7d480ce0e8624b02901bd80d9ba9817c"},
 		TargetUserIDs:    []string{"1fe7f425a0e049d29d87ca3d32e45b5a"},

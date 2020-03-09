@@ -799,9 +799,9 @@ func TestKafkaRegisterMultipleSubscriberCallbackSuccess(t *testing.T) {
 		TraceID:          "01c34ec3b07f4bfaa59ba0184a3de14d",
 		SpanContext:      "test-span-context",
 		UserID:           "e95b150043ff4a2c88427a6eb25e5bc8",
-		EventID:          3,
-		EventType:        301,
-		EventLevel:       3,
+		EventID:          3,   // nolint:gomnd
+		EventType:        301, // nolint:gomnd
+		EventLevel:       3,   //nolint:gomnd
 		ServiceName:      "test",
 		ClientIDs:        []string{"7d480ce0e8624b02901bd80d9ba9817c"},
 		TargetUserIDs:    []string{"1fe7f425a0e049d29d87ca3d32e45b5a"},
