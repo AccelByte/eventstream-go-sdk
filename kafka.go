@@ -140,7 +140,7 @@ func (client *KafkaClient) Publish(publishBuilder *PublishBuilder) error {
 		return err
 	}
 
-	message, event, err := constructEvent(publishBuilder)
+	message, event, err := ConstructEvent(publishBuilder)
 	if err != nil {
 		log.Errorf("unable to construct event: %s , error: %v", publishBuilder.eventName, err)
 		return fmt.Errorf("unable to construct event : %s , error : %v", publishBuilder.eventName, err)
@@ -200,21 +200,30 @@ func (client *KafkaClient) publishEvent(ctx context.Context, topic, eventName st
 	return nil
 }
 
-// constructEvent construct event message
-func constructEvent(publishBuilder *PublishBuilder) (kafka.Message, *Event, error) {
+// ConstructEvent construct event message
+func ConstructEvent(publishBuilder *PublishBuilder) (kafka.Message, *Event, error) {
 	id := generateID()
 	event := &Event{
-		ID:          id,
-		EventName:   publishBuilder.eventName,
-		Namespace:   publishBuilder.namespace,
-		ClientID:    publishBuilder.clientID,
-		UserID:      publishBuilder.userID,
-		TraceID:     publishBuilder.traceID,
-		SpanContext: publishBuilder.spanContext,
-		SessionID:   publishBuilder.sessionID,
-		Timestamp:   time.Now().UTC().Format(time.RFC3339),
-		Version:     publishBuilder.version,
-		Payload:     publishBuilder.payload,
+		ID:               id,
+		EventName:        publishBuilder.eventName,
+		Namespace:        publishBuilder.namespace,
+		ClientID:         publishBuilder.clientID,
+		UserID:           publishBuilder.userID,
+		TraceID:          publishBuilder.traceID,
+		SpanContext:      publishBuilder.spanContext,
+		SessionID:        publishBuilder.sessionID,
+		Timestamp:        time.Now().UTC().Format(time.RFC3339),
+		Version:          publishBuilder.version,
+		EventID:          publishBuilder.eventID,
+		EventType:        publishBuilder.eventType,
+		EventLevel:       publishBuilder.eventLevel,
+		ServiceName:      publishBuilder.serviceName,
+		ClientIDs:        publishBuilder.clientIDs,
+		TargetUserIDs:    publishBuilder.targetUserIDs,
+		TargetNamespace:  publishBuilder.targetNamespace,
+		Privacy:          publishBuilder.privacy,
+		AdditionalFields: publishBuilder.additionalFields,
+		Payload:          publishBuilder.payload,
 	}
 
 	eventBytes, err := marshal(event)
@@ -371,16 +380,25 @@ func (client *KafkaClient) runCallback(event *Event, consumerMessage kafka.Messa
 		event.EventName, groupID)
 
 	go callback(&Event{
-		ID:          event.ID,
-		ClientID:    event.ClientID,
-		EventName:   event.EventName,
-		Namespace:   event.Namespace,
-		UserID:      event.UserID,
-		SessionID:   event.SessionID,
-		TraceID:     event.TraceID,
-		SpanContext: event.SpanContext,
-		Timestamp:   event.Timestamp,
-		Version:     event.Version,
-		Payload:     event.Payload,
+		ID:               event.ID,
+		ClientID:         event.ClientID,
+		EventName:        event.EventName,
+		Namespace:        event.Namespace,
+		UserID:           event.UserID,
+		SessionID:        event.SessionID,
+		TraceID:          event.TraceID,
+		SpanContext:      event.SpanContext,
+		Timestamp:        event.Timestamp,
+		EventID:          event.EventID,
+		EventType:        event.EventType,
+		EventLevel:       event.EventLevel,
+		ServiceName:      event.ServiceName,
+		ClientIDs:        event.ClientIDs,
+		TargetUserIDs:    event.TargetUserIDs,
+		TargetNamespace:  event.TargetNamespace,
+		Privacy:          event.Privacy,
+		Version:          event.Version,
+		AdditionalFields: event.AdditionalFields,
+		Payload:          event.Payload,
 	}, nil)
 }

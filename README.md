@@ -89,6 +89,15 @@ err := client.Publish(
 			TraceID(TraceID).
 			SpanContext(SpanContext).
 			Context(Context).
+			EventID(eventID int).
+			EventType(eventType int).
+			EventLevel(eventLevel int).
+			ServiceName(serviceName string).
+			ClientIDs(clientIDs []string).
+			TargetUserIDs(targetUserIDs []string).
+			TargetNamespace(targetNamespace string).
+			Privacy(privacy bool).
+			AdditionalFields(additionalFields map[string]interface{}).
 			Version(Version).
 			Payload(Payload).
 			ErrorCallback(func(event *Event, err error) {}))
@@ -104,6 +113,15 @@ err := client.Publish(
 * SpanContext : Opentracing Jaeger Span Context(string - optional)
 * Context : Golang context. (context - default: context.background)
 * Version : Version of schema. (integer - default: `1`)
+* EventID : Event ID. Backward compatibility. (integer)
+* EventType : Event Type. Backward compatibility. (integer)
+* EventLevel : Event Level. Backward compatibility. (integer)
+* ServiceName : Service Name. Backward compatibility. (string)
+* ClientIDs : List of client IDs. Backward compatibility. ([]string - UUID v4 without Hyphens)
+* TargetUserIDs : List of target client IDs. Backward compatibility. ([]string - UUID v4 without Hyphens)
+* TargetNamespace : Target Namespace. Backward compatibility. (string)
+* Privacy : Privacy. Backward compatibility. (bool)
+* AdditionalFields : Additional fields. Backward compatibility. (map[string]interface{})
 * Payload : Additional attribute. (map[string]interface{})
 * ErrorCallback : Callback function when event failed to publish. (func(event *Event, err error){})
 
@@ -147,6 +165,15 @@ Event message format :
 * userId : Publisher user ID (string - UUID v4 without Hyphens)
 * sessionId : Publisher session ID (string - UUID v4 without Hyphens)
 * timestamp : Event time (time.Time)
+* event_id : Event id. backward compatibility. (integer)
+* event_type : Event type. backward compatibility. (integer)
+* event_level : Event level. backward compatibility. (integer)
+* service : Service name. backward compatibility. (string)
+* client_ids : Client IDs. backward compatibility. ([]string - UUID v4 without Hyphens)
+* target_user_ids : Target user IDs. backward compatibility. ([]string - UUID v4 without Hyphens)
+* target_namespace : Target namespace. backward compatibility. (string)
+* privacy : Privacy. backward compatibility. (bool)
+* additional_fields : Set of data / object that given by producer. Each data have own key for specific purpose. Backward compatibility. (map[string]interface{}) 
 * version : Event schema version (integer)
 * payload : Set of data / object that given by producer. Each data have own key for specific purpose. (map[string]interface{})
 

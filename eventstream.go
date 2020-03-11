@@ -45,17 +45,27 @@ const (
 
 // Event defines the structure of event
 type Event struct {
-	ID          string                 `json:"id"`
-	EventName   string                 `json:"name"`
-	Namespace   string                 `json:"namespace"`
-	ClientID    string                 `json:"clientId"`
-	TraceID     string                 `json:"traceId"`
-	SpanContext string                 `json:"spanContext"`
-	UserID      string                 `json:"userId"`
-	SessionID   string                 `json:"sessionId"`
-	Timestamp   string                 `json:"timestamp"`
-	Version     int                    `json:"version"`
-	Payload     map[string]interface{} `json:"payload"`
+	ID               string                 `json:"id"`
+	EventName        string                 `json:"name"`
+	Namespace        string                 `json:"namespace"`
+	ClientID         string                 `json:"clientId"`
+	TraceID          string                 `json:"traceId"`
+	SpanContext      string                 `json:"spanContext"`
+	UserID           string                 `json:"userId"`
+	SessionID        string                 `json:"sessionId"`
+	Timestamp        string                 `json:"timestamp"`
+	Version          int                    `json:"version"`
+	EventID          int                    `json:"event_id"`
+	EventType        int                    `json:"event_type"`
+	EventLevel       int                    `json:"event_level"`
+	ServiceName      string                 `json:"service"`
+	ClientIDs        []string               `json:"client_ids"`
+	TargetUserIDs    []string               `json:"target_user_ids"`
+	TargetNamespace  string                 `json:"target_namespace"`
+	Privacy          bool                   `json:"privacy"`
+	Topic            string                 `json:"topic"`
+	AdditionalFields map[string]interface{} `json:"additional_fields,omitempty"`
+	Payload          map[string]interface{} `json:"payload"`
 }
 
 // BrokerConfig is custom configuration for message broker
@@ -69,18 +79,27 @@ type BrokerConfig struct {
 
 // PublishBuilder defines the structure of message which is sent through message broker
 type PublishBuilder struct {
-	topic         []string
-	eventName     string
-	namespace     string
-	clientID      string
-	traceID       string
-	spanContext   string
-	userID        string
-	sessionID     string
-	version       int
-	payload       map[string]interface{}
-	errorCallback func(event *Event, err error)
-	ctx           context.Context
+	topic            []string
+	eventName        string
+	namespace        string
+	clientID         string
+	traceID          string
+	spanContext      string
+	userID           string
+	sessionID        string
+	version          int
+	eventID          int
+	eventType        int
+	eventLevel       int
+	serviceName      string
+	clientIDs        []string
+	targetUserIDs    []string
+	targetNamespace  string
+	privacy          bool
+	additionalFields map[string]interface{}
+	payload          map[string]interface{}
+	errorCallback    func(event *Event, err error)
+	ctx              context.Context
 }
 
 // NewPublish create new PublishBuilder instance
@@ -143,6 +162,60 @@ func (p *PublishBuilder) UserID(userID string) *PublishBuilder {
 // Version set event schema version
 func (p *PublishBuilder) Version(version int) *PublishBuilder {
 	p.version = version
+	return p
+}
+
+// EventID set eventID of publisher event
+func (p *PublishBuilder) EventID(eventID int) *PublishBuilder {
+	p.eventID = eventID
+	return p
+}
+
+// EventType set eventType of publisher event
+func (p *PublishBuilder) EventType(eventType int) *PublishBuilder {
+	p.eventType = eventType
+	return p
+}
+
+// EventLevel set eventLevel of publisher event
+func (p *PublishBuilder) EventLevel(eventLevel int) *PublishBuilder {
+	p.eventLevel = eventLevel
+	return p
+}
+
+// ServiceName set serviceName of publisher event
+func (p *PublishBuilder) ServiceName(serviceName string) *PublishBuilder {
+	p.serviceName = serviceName
+	return p
+}
+
+// ClientIDs set clientIDs of publisher event
+func (p *PublishBuilder) ClientIDs(clientIDs []string) *PublishBuilder {
+	p.clientIDs = clientIDs
+	return p
+}
+
+// TargetUserIDs set targetUserIDs of publisher event
+func (p *PublishBuilder) TargetUserIDs(targetUserIDs []string) *PublishBuilder {
+	p.targetUserIDs = targetUserIDs
+	return p
+}
+
+// TargetNamespace set targetNamespace of publisher event
+func (p *PublishBuilder) TargetNamespace(targetNamespace string) *PublishBuilder {
+	p.targetNamespace = targetNamespace
+	return p
+}
+
+// Privacy set privacy of publisher event
+func (p *PublishBuilder) Privacy(privacy bool) *PublishBuilder {
+	p.privacy = privacy
+	return p
+}
+
+// AdditionalFields set AdditionalFields of publisher event
+func (p *PublishBuilder) AdditionalFields(additionalFields map[string]interface{}) *PublishBuilder {
+	p.additionalFields = additionalFields
 	return p
 }
 

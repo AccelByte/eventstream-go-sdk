@@ -75,15 +75,29 @@ func TestKafkaPubSubSuccess(t *testing.T) {
 
 	var mockPayload = make(map[string]interface{})
 	mockPayload[testPayload] = Payload{FriendID: "user456"}
+
+	mockAdditionalFields := map[string]interface{}{
+		"summary": "user:_failed",
+	}
+
 	mockEvent := &Event{
-		EventName:   "testEvent",
-		Namespace:   "event",
-		ClientID:    "7d480ce0e8624b02901bd80d9ba9817c",
-		TraceID:     "01c34ec3b07f4bfaa59ba0184a3de14d",
-		SpanContext: "test-span-id",
-		UserID:      "e95b150043ff4a2c88427a6eb25e5bc8",
-		Version:     defaultVersion,
-		Payload:     mockPayload,
+		EventName:        "testEvent",
+		Namespace:        "event",
+		ClientID:         "7d480ce0e8624b02901bd80d9ba9817c",
+		TraceID:          "01c34ec3b07f4bfaa59ba0184a3de14d",
+		SpanContext:      "test-span-id",
+		UserID:           "e95b150043ff4a2c88427a6eb25e5bc8",
+		EventID:          3,
+		EventType:        301,
+		EventLevel:       3,
+		ServiceName:      "test",
+		ClientIDs:        []string{"7d480ce0e8624b02901bd80d9ba9817c"},
+		TargetUserIDs:    []string{"1fe7f425a0e049d29d87ca3d32e45b5a"},
+		TargetNamespace:  "publisher",
+		Privacy:          true,
+		AdditionalFields: mockAdditionalFields,
+		Version:          defaultVersion,
+		Payload:          mockPayload,
 	}
 
 	err := client.Register(
@@ -110,6 +124,15 @@ func TestKafkaPubSubSuccess(t *testing.T) {
 				assert.Equal(t, mockEvent.SpanContext, event.SpanContext, "span context should be equal")
 				assert.Equal(t, mockEvent.UserID, event.UserID, "user ID should be equal")
 				assert.Equal(t, mockEvent.SessionID, event.SessionID, "session ID should be equal")
+				assert.Equal(t, mockEvent.EventID, event.EventID, "EventID should be equal")
+				assert.Equal(t, mockEvent.EventType, event.EventType, "EventType should be equal")
+				assert.Equal(t, mockEvent.EventLevel, event.EventLevel, "EventLevel should be equal")
+				assert.Equal(t, mockEvent.ServiceName, event.ServiceName, "ServiceName should be equal")
+				assert.Equal(t, mockEvent.ClientIDs, event.ClientIDs, "ClientIDs should be equal")
+				assert.Equal(t, mockEvent.TargetUserIDs, event.TargetUserIDs, "TargetUserIDs should be equal")
+				assert.Equal(t, mockEvent.TargetNamespace, event.TargetNamespace, "TargetNamespace should be equal")
+				assert.Equal(t, mockEvent.Privacy, event.Privacy, "Privacy should be equal")
+				assert.Equal(t, mockEvent.AdditionalFields, event.AdditionalFields, "AdditionalFields should be equal")
 				assert.Equal(t, mockEvent.Version, event.Version, "version should be equal")
 				if validPayload := reflect.DeepEqual(mockEvent.Payload[testPayload].(Payload), eventPayload); !validPayload {
 					assert.Fail(t, "payload should be equal")
@@ -132,6 +155,15 @@ func TestKafkaPubSubSuccess(t *testing.T) {
 			TraceID(mockEvent.TraceID).
 			SpanContext(mockEvent.SpanContext).
 			Context(context.Background()).
+			EventID(mockEvent.EventID).
+			EventType(mockEvent.EventType).
+			EventLevel(mockEvent.EventLevel).
+			ServiceName(mockEvent.ServiceName).
+			ClientIDs(mockEvent.ClientIDs).
+			TargetUserIDs(mockEvent.TargetUserIDs).
+			TargetNamespace(mockEvent.TargetNamespace).
+			Privacy(mockEvent.Privacy).
+			AdditionalFields(mockEvent.AdditionalFields).
 			Payload(mockPayload))
 	if err != nil {
 		assert.FailNow(t, errorPublish, err)
@@ -159,15 +191,29 @@ func TestKafkaPubFailed(t *testing.T) {
 
 	var mockPayload = make(map[string]interface{})
 	mockPayload[testPayload] = Payload{FriendID: "user456"}
+
+	mockAdditionalFields := map[string]interface{}{
+		"summary": "user:_failed",
+	}
+
 	mockEvent := &Event{
-		EventName:   "testEvent",
-		Namespace:   "event",
-		ClientID:    "7d480ce0e8624b02901bd80d9ba9817c",
-		TraceID:     "01c34ec3b07f4bfaa59ba0184a3de14d",
-		SpanContext: "test-span-context",
-		UserID:      "e95b150043ff4a2c88427a6eb25e5bc8",
-		Version:     defaultVersion,
-		Payload:     mockPayload,
+		EventName:        "testEvent",
+		Namespace:        "event",
+		ClientID:         "7d480ce0e8624b02901bd80d9ba9817c",
+		TraceID:          "01c34ec3b07f4bfaa59ba0184a3de14d",
+		SpanContext:      "test-span-context",
+		UserID:           "e95b150043ff4a2c88427a6eb25e5bc8",
+		EventID:          3,
+		EventType:        301,
+		EventLevel:       3,
+		ServiceName:      "test",
+		ClientIDs:        []string{"7d480ce0e8624b02901bd80d9ba9817c"},
+		TargetUserIDs:    []string{"1fe7f425a0e049d29d87ca3d32e45b5a"},
+		TargetNamespace:  "publisher",
+		Privacy:          true,
+		AdditionalFields: mockAdditionalFields,
+		Version:          defaultVersion,
+		Payload:          mockPayload,
 	}
 
 	errorCallback := func(event *Event, err error) {
@@ -179,6 +225,15 @@ func TestKafkaPubFailed(t *testing.T) {
 		assert.Equal(t, mockEvent.SpanContext, event.SpanContext, "span context should be equal")
 		assert.Equal(t, mockEvent.UserID, event.UserID, "user ID should be equal")
 		assert.Equal(t, mockEvent.SessionID, event.SessionID, "session ID should be equal")
+		assert.Equal(t, mockEvent.EventID, event.EventID, "EventID should be equal")
+		assert.Equal(t, mockEvent.EventType, event.EventType, "EventType should be equal")
+		assert.Equal(t, mockEvent.EventLevel, event.EventLevel, "EventLevel should be equal")
+		assert.Equal(t, mockEvent.ServiceName, event.ServiceName, "ServiceName should be equal")
+		assert.Equal(t, mockEvent.ClientIDs, event.ClientIDs, "ClientIDs should be equal")
+		assert.Equal(t, mockEvent.TargetUserIDs, event.TargetUserIDs, "TargetUserIDs should be equal")
+		assert.Equal(t, mockEvent.TargetNamespace, event.TargetNamespace, "TargetNamespace should be equal")
+		assert.Equal(t, mockEvent.Privacy, event.Privacy, "Privacy should be equal")
+		assert.Equal(t, mockEvent.AdditionalFields, event.AdditionalFields, "AdditionalFields should be equal")
 		assert.Equal(t, mockEvent.Version, event.Version, "version should be equal")
 		doneChan <- true
 	}
@@ -194,6 +249,15 @@ func TestKafkaPubFailed(t *testing.T) {
 			TraceID(mockEvent.TraceID).
 			SpanContext(mockEvent.SpanContext).
 			Context(context.Background()).
+			EventID(mockEvent.EventID).
+			EventType(mockEvent.EventType).
+			EventLevel(mockEvent.EventLevel).
+			ServiceName(mockEvent.ServiceName).
+			ClientIDs(mockEvent.ClientIDs).
+			TargetUserIDs(mockEvent.TargetUserIDs).
+			TargetNamespace(mockEvent.TargetNamespace).
+			Privacy(mockEvent.Privacy).
+			AdditionalFields(mockAdditionalFields).
 			Payload(mockPayload).
 			ErrorCallback(errorCallback))
 	if err != nil {
@@ -222,16 +286,30 @@ func TestKafkaPubSubMultipleTopicSuccess(t *testing.T) {
 
 	var mockPayload = make(map[string]interface{})
 	mockPayload[testPayload] = Payload{FriendID: "user456"}
+
+	mockAdditionalFields := map[string]interface{}{
+		"summary": "user:_failed",
+	}
+
 	mockEvent := &Event{
-		EventName:   "testEvent",
-		Namespace:   "event",
-		ClientID:    "fe5bd0e3dc184d2d8ae0e09fcedf0f51",
-		TraceID:     "882da8cddd174d12af25da6310b47bd5",
-		SpanContext: "test-span-context",
-		UserID:      "48bf8a020b584f31bc605bf65d3300ed",
-		SessionID:   "c1ab4f754acc4cb48a8f68dd25cfca21",
-		Version:     2,
-		Payload:     mockPayload,
+		EventName:        "testEvent",
+		Namespace:        "event",
+		ClientID:         "fe5bd0e3dc184d2d8ae0e09fcedf0f51",
+		TraceID:          "882da8cddd174d12af25da6310b47bd5",
+		SpanContext:      "test-span-context",
+		UserID:           "48bf8a020b584f31bc605bf65d3300ed",
+		SessionID:        "c1ab4f754acc4cb48a8f68dd25cfca21",
+		EventID:          3,
+		EventType:        301,
+		EventLevel:       3,
+		ServiceName:      "test",
+		ClientIDs:        []string{"7d480ce0e8624b02901bd80d9ba9817c"},
+		TargetUserIDs:    []string{"1fe7f425a0e049d29d87ca3d32e45b5a"},
+		TargetNamespace:  "publisher",
+		Privacy:          true,
+		AdditionalFields: mockAdditionalFields,
+		Version:          2,
+		Payload:          mockPayload,
 	}
 
 	err := client.Register(
@@ -258,6 +336,15 @@ func TestKafkaPubSubMultipleTopicSuccess(t *testing.T) {
 				assert.Equal(t, mockEvent.SpanContext, event.SpanContext, "span context should be equal")
 				assert.Equal(t, mockEvent.UserID, event.UserID, "user ID should be equal")
 				assert.Equal(t, mockEvent.SessionID, event.SessionID, "session ID should be equal")
+				assert.Equal(t, mockEvent.EventID, event.EventID, "EventID should be equal")
+				assert.Equal(t, mockEvent.EventType, event.EventType, "EventType should be equal")
+				assert.Equal(t, mockEvent.EventLevel, event.EventLevel, "EventLevel should be equal")
+				assert.Equal(t, mockEvent.ServiceName, event.ServiceName, "ServiceName should be equal")
+				assert.Equal(t, mockEvent.ClientIDs, event.ClientIDs, "ClientIDs should be equal")
+				assert.Equal(t, mockEvent.TargetUserIDs, event.TargetUserIDs, "TargetUserIDs should be equal")
+				assert.Equal(t, mockEvent.TargetNamespace, event.TargetNamespace, "TargetNamespace should be equal")
+				assert.Equal(t, mockEvent.Privacy, event.Privacy, "Privacy should be equal")
+				assert.Equal(t, mockEvent.AdditionalFields, event.AdditionalFields, "AdditionalFields should be equal")
 				assert.Equal(t, mockEvent.Version, event.Version, "version should be equal")
 				if validPayload := reflect.DeepEqual(mockEvent.Payload[testPayload].(Payload), eventPayload); !validPayload {
 					assert.Fail(t, "payload should be equal")
@@ -293,6 +380,15 @@ func TestKafkaPubSubMultipleTopicSuccess(t *testing.T) {
 				assert.Equal(t, mockEvent.SpanContext, event.SpanContext, "span context should be equal")
 				assert.Equal(t, mockEvent.UserID, event.UserID, "user ID should be equal")
 				assert.Equal(t, mockEvent.SessionID, event.SessionID, "session ID should be equal")
+				assert.Equal(t, mockEvent.EventID, event.EventID, "EventID should be equal")
+				assert.Equal(t, mockEvent.EventType, event.EventType, "EventType should be equal")
+				assert.Equal(t, mockEvent.EventLevel, event.EventLevel, "EventLevel should be equal")
+				assert.Equal(t, mockEvent.ServiceName, event.ServiceName, "ServiceName should be equal")
+				assert.Equal(t, mockEvent.ClientIDs, event.ClientIDs, "ClientIDs should be equal")
+				assert.Equal(t, mockEvent.TargetUserIDs, event.TargetUserIDs, "TargetUserIDs should be equal")
+				assert.Equal(t, mockEvent.TargetNamespace, event.TargetNamespace, "TargetNamespace should be equal")
+				assert.Equal(t, mockEvent.Privacy, event.Privacy, "Privacy should be equal")
+				assert.Equal(t, mockEvent.AdditionalFields, event.AdditionalFields, "AdditionalFields should be equal")
 				assert.Equal(t, mockEvent.Version, event.Version, "version should be equal")
 				if validPayload := reflect.DeepEqual(mockEvent.Payload[testPayload].(Payload), eventPayload); !validPayload {
 					assert.Fail(t, "payload should be equal")
@@ -314,6 +410,15 @@ func TestKafkaPubSubMultipleTopicSuccess(t *testing.T) {
 			SessionID(mockEvent.SessionID).
 			TraceID(mockEvent.TraceID).
 			SpanContext(mockEvent.SpanContext).
+			EventID(mockEvent.EventID).
+			EventType(mockEvent.EventType).
+			EventLevel(mockEvent.EventLevel).
+			ServiceName(mockEvent.ServiceName).
+			ClientIDs(mockEvent.ClientIDs).
+			TargetUserIDs(mockEvent.TargetUserIDs).
+			TargetNamespace(mockEvent.TargetNamespace).
+			Privacy(mockEvent.Privacy).
+			AdditionalFields(mockEvent.AdditionalFields).
 			Version(2).
 			Context(context.Background()).
 			Payload(mockPayload))
@@ -350,16 +455,30 @@ func TestKafkaPubSubDifferentGroupID(t *testing.T) {
 
 	var mockPayload = make(map[string]interface{})
 	mockPayload[testPayload] = Payload{FriendID: "user456"}
+
+	mockAdditionalFields := map[string]interface{}{
+		"summary": "user:_failed",
+	}
+
 	mockEvent := &Event{
-		EventName:   "testEvent",
-		Namespace:   "event",
-		ClientID:    "6ab512c877c64d06911b4772fede4dd1",
-		TraceID:     "2a44c482cd444f7cae29e90adb701315",
-		SpanContext: "test-span-context",
-		UserID:      "f13db76e044f43d988a2df1c7ea0000f",
-		SessionID:   "77a0313e89a74c0684aacc1dc80329e6",
-		Version:     2,
-		Payload:     mockPayload,
+		EventName:        "testEvent",
+		Namespace:        "event",
+		ClientID:         "6ab512c877c64d06911b4772fede4dd1",
+		TraceID:          "2a44c482cd444f7cae29e90adb701315",
+		SpanContext:      "test-span-context",
+		UserID:           "f13db76e044f43d988a2df1c7ea0000f",
+		SessionID:        "77a0313e89a74c0684aacc1dc80329e6",
+		EventID:          3,
+		EventType:        301,
+		EventLevel:       3,
+		ServiceName:      "test",
+		ClientIDs:        []string{"7d480ce0e8624b02901bd80d9ba9817c"},
+		TargetUserIDs:    []string{"1fe7f425a0e049d29d87ca3d32e45b5a"},
+		TargetNamespace:  "publisher",
+		Privacy:          true,
+		AdditionalFields: mockAdditionalFields,
+		Version:          2,
+		Payload:          mockPayload,
 	}
 
 	err := client.Register(
@@ -387,6 +506,15 @@ func TestKafkaPubSubDifferentGroupID(t *testing.T) {
 				assert.Equal(t, mockEvent.SpanContext, event.SpanContext, "span context should be equal")
 				assert.Equal(t, mockEvent.UserID, event.UserID, "user ID should be equal")
 				assert.Equal(t, mockEvent.SessionID, event.SessionID, "session ID should be equal")
+				assert.Equal(t, mockEvent.EventID, event.EventID, "EventID should be equal")
+				assert.Equal(t, mockEvent.EventType, event.EventType, "EventType should be equal")
+				assert.Equal(t, mockEvent.EventLevel, event.EventLevel, "EventLevel should be equal")
+				assert.Equal(t, mockEvent.ServiceName, event.ServiceName, "ServiceName should be equal")
+				assert.Equal(t, mockEvent.ClientIDs, event.ClientIDs, "ClientIDs should be equal")
+				assert.Equal(t, mockEvent.TargetUserIDs, event.TargetUserIDs, "TargetUserIDs should be equal")
+				assert.Equal(t, mockEvent.TargetNamespace, event.TargetNamespace, "TargetNamespace should be equal")
+				assert.Equal(t, mockEvent.Privacy, event.Privacy, "Privacy should be equal")
+				assert.Equal(t, mockEvent.AdditionalFields, event.AdditionalFields, "AdditionalFields should be equal")
 				assert.Equal(t, mockEvent.Version, event.Version, "version should be equal")
 				if validPayload := reflect.DeepEqual(mockEvent.Payload[testPayload].(Payload), eventPayload); !validPayload {
 					assert.Fail(t, "payload should be equal")
@@ -423,6 +551,15 @@ func TestKafkaPubSubDifferentGroupID(t *testing.T) {
 				assert.Equal(t, mockEvent.SpanContext, event.SpanContext, "span context should be equal")
 				assert.Equal(t, mockEvent.UserID, event.UserID, "user ID should be equal")
 				assert.Equal(t, mockEvent.SessionID, event.SessionID, "session ID should be equal")
+				assert.Equal(t, mockEvent.EventID, event.EventID, "EventID should be equal")
+				assert.Equal(t, mockEvent.EventType, event.EventType, "EventType should be equal")
+				assert.Equal(t, mockEvent.EventLevel, event.EventLevel, "EventLevel should be equal")
+				assert.Equal(t, mockEvent.ServiceName, event.ServiceName, "ServiceName should be equal")
+				assert.Equal(t, mockEvent.ClientIDs, event.ClientIDs, "ClientIDs should be equal")
+				assert.Equal(t, mockEvent.TargetUserIDs, event.TargetUserIDs, "TargetUserIDs should be equal")
+				assert.Equal(t, mockEvent.TargetNamespace, event.TargetNamespace, "TargetNamespace should be equal")
+				assert.Equal(t, mockEvent.Privacy, event.Privacy, "Privacy should be equal")
+				assert.Equal(t, mockEvent.AdditionalFields, event.AdditionalFields, "AdditionalFields should be equal")
 				assert.Equal(t, mockEvent.Version, event.Version, "version should be equal")
 				if validPayload := reflect.DeepEqual(mockEvent.Payload[testPayload].(Payload), eventPayload); !validPayload {
 					assert.Fail(t, "payload should be equal")
@@ -444,6 +581,15 @@ func TestKafkaPubSubDifferentGroupID(t *testing.T) {
 			SessionID(mockEvent.SessionID).
 			TraceID(mockEvent.TraceID).
 			SpanContext(mockEvent.SpanContext).
+			EventID(mockEvent.EventID).
+			EventType(mockEvent.EventType).
+			EventLevel(mockEvent.EventLevel).
+			ServiceName(mockEvent.ServiceName).
+			ClientIDs(mockEvent.ClientIDs).
+			TargetUserIDs(mockEvent.TargetUserIDs).
+			TargetNamespace(mockEvent.TargetNamespace).
+			Privacy(mockEvent.Privacy).
+			AdditionalFields(mockEvent.AdditionalFields).
 			Version(2).
 			Context(context.Background()).
 			Payload(mockPayload))
@@ -478,15 +624,29 @@ func TestKafkaPubSubSameGroupID(t *testing.T) {
 
 	var mockPayload = make(map[string]interface{})
 	mockPayload[testPayload] = Payload{FriendID: "user456"}
+
+	mockAdditionalFields := map[string]interface{}{
+		"summary": "user:_failed",
+	}
+
 	mockEvent := &Event{
-		EventName:   "testEvent",
-		Namespace:   "event",
-		ClientID:    "269b3ade83dd45ebbb896609bf10fe03",
-		TraceID:     "b4a410fb53d2448b8648ba0c58f09ce4",
-		SpanContext: "test-span-context",
-		UserID:      "71895627426741148ad2d85399c53d71",
-		Version:     2,
-		Payload:     mockPayload,
+		EventName:        "testEvent",
+		Namespace:        "event",
+		ClientID:         "269b3ade83dd45ebbb896609bf10fe03",
+		TraceID:          "b4a410fb53d2448b8648ba0c58f09ce4",
+		SpanContext:      "test-span-context",
+		UserID:           "71895627426741148ad2d85399c53d71",
+		EventID:          3,
+		EventType:        301,
+		EventLevel:       3,
+		ServiceName:      "test",
+		ClientIDs:        []string{"7d480ce0e8624b02901bd80d9ba9817c"},
+		TargetUserIDs:    []string{"1fe7f425a0e049d29d87ca3d32e45b5a"},
+		TargetNamespace:  "publisher",
+		Privacy:          true,
+		AdditionalFields: mockAdditionalFields,
+		Version:          2,
+		Payload:          mockPayload,
 	}
 
 	err := client.Register(
@@ -514,6 +674,15 @@ func TestKafkaPubSubSameGroupID(t *testing.T) {
 				assert.Equal(t, mockEvent.SpanContext, event.SpanContext, "span context should be equal")
 				assert.Equal(t, mockEvent.UserID, event.UserID, "user ID should be equal")
 				assert.Equal(t, mockEvent.SessionID, event.SessionID, "session ID should be equal")
+				assert.Equal(t, mockEvent.EventID, event.EventID, "EventID should be equal")
+				assert.Equal(t, mockEvent.EventType, event.EventType, "EventType should be equal")
+				assert.Equal(t, mockEvent.EventLevel, event.EventLevel, "EventLevel should be equal")
+				assert.Equal(t, mockEvent.ServiceName, event.ServiceName, "ServiceName should be equal")
+				assert.Equal(t, mockEvent.ClientIDs, event.ClientIDs, "ClientIDs should be equal")
+				assert.Equal(t, mockEvent.TargetUserIDs, event.TargetUserIDs, "TargetUserIDs should be equal")
+				assert.Equal(t, mockEvent.TargetNamespace, event.TargetNamespace, "TargetNamespace should be equal")
+				assert.Equal(t, mockEvent.Privacy, event.Privacy, "Privacy should be equal")
+				assert.Equal(t, mockEvent.AdditionalFields, event.AdditionalFields, "AdditionalFields should be equal")
 				assert.Equal(t, mockEvent.Version, event.Version, "version should be equal")
 				if validPayload := reflect.DeepEqual(mockEvent.Payload[testPayload].(Payload), eventPayload); !validPayload {
 					assert.Fail(t, "payload should be equal")
@@ -550,6 +719,15 @@ func TestKafkaPubSubSameGroupID(t *testing.T) {
 				assert.Equal(t, mockEvent.SpanContext, event.SpanContext, "span context should be equal")
 				assert.Equal(t, mockEvent.UserID, event.UserID, "user ID should be equal")
 				assert.Equal(t, mockEvent.SessionID, event.SessionID, "session ID should be equal")
+				assert.Equal(t, mockEvent.EventID, event.EventID, "EventID should be equal")
+				assert.Equal(t, mockEvent.EventType, event.EventType, "EventType should be equal")
+				assert.Equal(t, mockEvent.EventLevel, event.EventLevel, "EventLevel should be equal")
+				assert.Equal(t, mockEvent.ServiceName, event.ServiceName, "ServiceName should be equal")
+				assert.Equal(t, mockEvent.ClientIDs, event.ClientIDs, "ClientIDs should be equal")
+				assert.Equal(t, mockEvent.TargetUserIDs, event.TargetUserIDs, "TargetUserIDs should be equal")
+				assert.Equal(t, mockEvent.TargetNamespace, event.TargetNamespace, "TargetNamespace should be equal")
+				assert.Equal(t, mockEvent.Privacy, event.Privacy, "Privacy should be equal")
+				assert.Equal(t, mockEvent.AdditionalFields, event.AdditionalFields, "AdditionalFields should be equal")
 				assert.Equal(t, mockEvent.Version, event.Version, "version should be equal")
 				if validPayload := reflect.DeepEqual(mockEvent.Payload[testPayload].(Payload), eventPayload); !validPayload {
 					assert.Fail(t, "payload should be equal")
@@ -571,6 +749,15 @@ func TestKafkaPubSubSameGroupID(t *testing.T) {
 			SessionID(mockEvent.SessionID).
 			TraceID(mockEvent.TraceID).
 			SpanContext(mockEvent.SpanContext).
+			EventID(mockEvent.EventID).
+			EventType(mockEvent.EventType).
+			EventLevel(mockEvent.EventLevel).
+			ServiceName(mockEvent.ServiceName).
+			ClientIDs(mockEvent.ClientIDs).
+			TargetUserIDs(mockEvent.TargetUserIDs).
+			TargetNamespace(mockEvent.TargetNamespace).
+			Privacy(mockEvent.Privacy).
+			AdditionalFields(mockEvent.AdditionalFields).
 			Version(2).
 			Context(context.Background()).
 			Payload(mockPayload))
@@ -600,15 +787,29 @@ func TestKafkaRegisterMultipleSubscriberCallbackSuccess(t *testing.T) {
 
 	var mockPayload = make(map[string]interface{})
 	mockPayload[testPayload] = "testPayload"
+
+	mockAdditionalFields := map[string]interface{}{
+		"summary": "user:_failed",
+	}
+
 	mockEvent := &Event{
-		EventName:   "testEvent",
-		Namespace:   "event",
-		ClientID:    "7d480ce0e8624b02901bd80d9ba9817c",
-		TraceID:     "01c34ec3b07f4bfaa59ba0184a3de14d",
-		SpanContext: "test-span-context",
-		UserID:      "e95b150043ff4a2c88427a6eb25e5bc8",
-		Version:     defaultVersion,
-		Payload:     mockPayload,
+		EventName:        "testEvent",
+		Namespace:        "event",
+		ClientID:         "7d480ce0e8624b02901bd80d9ba9817c",
+		TraceID:          "01c34ec3b07f4bfaa59ba0184a3de14d",
+		SpanContext:      "test-span-context",
+		UserID:           "e95b150043ff4a2c88427a6eb25e5bc8",
+		EventID:          3,   // nolint:gomnd
+		EventType:        301, // nolint:gomnd
+		EventLevel:       3,   //nolint:gomnd
+		ServiceName:      "test",
+		ClientIDs:        []string{"7d480ce0e8624b02901bd80d9ba9817c"},
+		TargetUserIDs:    []string{"1fe7f425a0e049d29d87ca3d32e45b5a"},
+		TargetNamespace:  "publisher",
+		Privacy:          true,
+		AdditionalFields: mockAdditionalFields,
+		Version:          defaultVersion,
+		Payload:          mockPayload,
 	}
 
 	err := client.Register(
@@ -658,6 +859,15 @@ func TestKafkaRegisterMultipleSubscriberCallbackSuccess(t *testing.T) {
 			SessionID(mockEvent.SessionID).
 			TraceID(mockEvent.TraceID).
 			SpanContext(mockEvent.SpanContext).
+			EventID(mockEvent.EventID).
+			EventType(mockEvent.EventType).
+			EventLevel(mockEvent.EventLevel).
+			ServiceName(mockEvent.ServiceName).
+			ClientIDs(mockEvent.ClientIDs).
+			TargetUserIDs(mockEvent.TargetUserIDs).
+			TargetNamespace(mockEvent.TargetNamespace).
+			Privacy(mockEvent.Privacy).
+			AdditionalFields(mockEvent.AdditionalFields).
 			Context(context.Background()).
 			Payload(mockPayload))
 	if err != nil {
