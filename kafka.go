@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"sync"
 	"time"
 
@@ -56,9 +57,6 @@ type KafkaClient struct {
 
 	// map to store callback function
 	subscribeMap *sync.Map
-
-	// map to store stop channel for unsubscribe
-	stopChannelMap *sync.Map
 }
 
 func setConfig(writerConfig *kafka.WriterConfig, readerConfig *kafka.ReaderConfig, config *BrokerConfig) {
@@ -89,12 +87,13 @@ func setLogLevel(logMode string) {
 		log.SetLevel(log.WarnLevel)
 	case ErrorLevel:
 		log.SetLevel(log.ErrorLevel)
+	default:
+		log.SetOutput(ioutil.Discard)
 	}
 }
 
 // newKafkaClient create a new instance of KafkaClient
 func newKafkaClient(brokers []string, prefix string, config ...*BrokerConfig) *KafkaClient {
-
 	log.Info("create new kafka client")
 
 	writerConfig := &kafka.WriterConfig{
@@ -121,7 +120,6 @@ func newKafkaClient(brokers []string, prefix string, config ...*BrokerConfig) *K
 		publishConfig:    *writerConfig,
 		subscribeConfig:  *readerConfig,
 		subscribeMap:     &sync.Map{},
-		stopChannelMap:   &sync.Map{},
 	}
 }
 
@@ -226,12 +224,6 @@ func (client *KafkaClient) Unregister(topic string) {
 	if _, ok := client.subscribeMap.Load(topic); ok {
 		client.subscribeMap.Delete(topic)
 	}
-	if val, ok := client.stopChannelMap.Load(topic); ok {
-		stopChan, ok := val.(chan bool)
-		if ok {
-			stopChan <- true
-		}
-	}
 }
 
 // Register register callback function and then subscribe topic
@@ -271,12 +263,11 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 		defer func() {
 			_ = reader.Close()
 		}()
-		stopChan := make(chan bool, 1)
-		client.stopChannelMap.Store(topic, stopChan)
 
 		for {
 			select {
-			case <-stopChan:
+			case <-subscribeBuilder.ctx.Done():
+				client.Unregister(topic)
 				return
 			default:
 				consumerMessage, errRead := reader.ReadMessage(subscribeBuilder.ctx)
