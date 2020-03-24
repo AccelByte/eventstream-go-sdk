@@ -19,12 +19,13 @@ import (
 )
 
 const (
-	timeoutTest    = 120
-	prefix         = "prefix"
-	testPayload    = "testPayload"
-	errorTimeout   = "timeout while executing test"
-	errorPublish   = "error when publish event"
-	errorSubscribe = "error when subscribe event"
+	timeoutTest     = 120
+	prefix          = "prefix"
+	testPayload     = "testPayload"
+	errorTimeout    = "timeout while executing test"
+	errorPublish    = "error when publish event"
+	errorSubscribe  = "error when subscribe event"
+	errorUnregister = "error when unregister event name and callback"
 )
 
 type Payload struct {
@@ -105,7 +106,7 @@ func TestKafkaPubSubSuccess(t *testing.T) {
 		NewSubscribe().
 			Topic(topicName).
 			EventName(mockEvent.EventName).
-			Callback(func(event *Event, err error) {
+			Callback(func(ctx context.Context, event *Event, err error) {
 				var eventPayload Payload
 				if err != nil {
 					assert.Fail(t, "error when run callback")
@@ -244,7 +245,7 @@ func TestKafkaPubSubMultipleTopicSuccess(t *testing.T) {
 		NewSubscribe().
 			Topic(topicName1).
 			EventName(mockEvent.EventName).
-			Callback(func(event *Event, err error) {
+			Callback(func(ctx context.Context, event *Event, err error) {
 				var eventPayload Payload
 				if err != nil {
 					assert.Fail(t, "error when run callback 1")
@@ -273,7 +274,7 @@ func TestKafkaPubSubMultipleTopicSuccess(t *testing.T) {
 		NewSubscribe().
 			Topic(topicName2).
 			EventName(mockEvent.EventName).
-			Callback(func(event *Event, err error) {
+			Callback(func(ctx context.Context, event *Event, err error) {
 				var eventPayload Payload
 				if err != nil {
 					assert.Fail(t, "error when run callback 2")
@@ -358,7 +359,7 @@ func TestKafkaPubSubDifferentGroupID(t *testing.T) {
 			Topic(topicName).
 			EventName(mockEvent.EventName).
 			GroupID(groupID).
-			Callback(func(event *Event, err error) {
+			Callback(func(ctx context.Context, event *Event, err error) {
 				var eventPayload Payload
 				if err != nil {
 					assert.Fail(t, "error when run callback 1")
@@ -388,7 +389,7 @@ func TestKafkaPubSubDifferentGroupID(t *testing.T) {
 			Topic(topicName).
 			EventName(mockEvent.EventName).
 			GroupID(groupID2).
-			Callback(func(event *Event, err error) {
+			Callback(func(ctx context.Context, event *Event, err error) {
 				var eventPayload Payload
 				if err != nil {
 					assert.Fail(t, "error when run callback 2")
@@ -473,7 +474,7 @@ func TestKafkaPubSubSameGroupID(t *testing.T) {
 			Topic(topicName).
 			EventName(mockEvent.EventName).
 			GroupID(groupID).
-			Callback(func(event *Event, err error) {
+			Callback(func(ctx context.Context, event *Event, err error) {
 				var eventPayload Payload
 				if err != nil {
 					assert.Fail(t, "error when run callback 1")
@@ -503,7 +504,7 @@ func TestKafkaPubSubSameGroupID(t *testing.T) {
 			Topic(topicName).
 			EventName(mockEvent.EventName).
 			GroupID(groupID).
-			Callback(func(event *Event, err error) {
+			Callback(func(ctx context.Context, event *Event, err error) {
 				var eventPayload Payload
 				if err != nil {
 					assert.Fail(t, "error when run callback 2")
@@ -580,7 +581,7 @@ func TestKafkaRegisterMultipleSubscriberCallbackSuccess(t *testing.T) {
 		NewSubscribe().
 			Topic(topicName).
 			EventName(mockEvent.EventName).
-			Callback(func(_ *Event, err error) {
+			Callback(func(ctx context.Context, _ *Event, err error) {
 				assert.NoError(t, err, "there's error right before event consumed: %v", err)
 				doneChan <- true
 			}))
@@ -593,7 +594,7 @@ func TestKafkaRegisterMultipleSubscriberCallbackSuccess(t *testing.T) {
 		NewSubscribe().
 			Topic("anotherevent").
 			EventName(mockEvent.EventName).
-			Callback(func(_ *Event, err error) {
+			Callback(func(ctx context.Context, _ *Event, err error) {
 				assert.NoError(t, err, "there's error right before event consumed: %v", err)
 				// just to test subscriber, no need any  action here
 				doneChan <- true
@@ -654,7 +655,7 @@ func TestKafkaUnregisterTopicSuccess(t *testing.T) {
 		NewSubscribe().
 			Topic(topicName).
 			EventName(mockEvent.EventName).
-			Callback(func(_ *Event, err error) {
+			Callback(func(ctx context.Context, _ *Event, err error) {
 				assert.NoError(t, err, "there's error right before event consumed: %v", err)
 				doneChan <- true
 			}))
@@ -667,7 +668,7 @@ func TestKafkaUnregisterTopicSuccess(t *testing.T) {
 		NewSubscribe().
 			Topic("anotherevent").
 			EventName(mockEvent.EventName).
-			Callback(func(_ *Event, err error) {
+			Callback(func(ctx context.Context, _ *Event, err error) {
 				assert.NoError(t, err, "there's error right before event consumed: %v", err)
 				// just to test subscriber, no need any  action here
 				doneChan <- true
@@ -677,7 +678,10 @@ func TestKafkaUnregisterTopicSuccess(t *testing.T) {
 		return
 	}
 
-	client.Unregister("anotherevent")
+	err = client.Unregister("anotherevent", mockEvent.EventName)
+	if err != nil {
+		assert.FailNow(t, errorUnregister, err)
+	}
 
 	err = client.Publish(
 		NewPublish().

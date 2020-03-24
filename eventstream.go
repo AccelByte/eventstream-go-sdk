@@ -161,7 +161,7 @@ func (p *PublishBuilder) Context(ctx context.Context) *PublishBuilder {
 type SubscribeBuilder struct {
 	topic     string
 	groupID   string
-	callback  func(event *Event, err error)
+	callback  func(ctx context.Context, event *Event, err error)
 	eventName string
 	ctx       context.Context
 }
@@ -192,7 +192,7 @@ func (s *SubscribeBuilder) EventName(eventName string) *SubscribeBuilder {
 }
 
 // Callback to do when the event received
-func (s *SubscribeBuilder) Callback(callback func(event *Event, err error)) *SubscribeBuilder {
+func (s *SubscribeBuilder) Callback(callback func(ctx context.Context, event *Event, err error)) *SubscribeBuilder {
 	s.callback = callback
 	return s
 }
@@ -221,5 +221,5 @@ func NewClient(prefix, stream string, brokers []string, config ...*BrokerConfig)
 type Client interface {
 	Publish(publishBuilder *PublishBuilder) error
 	Register(subscribeBuilder *SubscribeBuilder) error
-	Unregister(topic string)
+	Unregister(topic, eventName string) error
 }

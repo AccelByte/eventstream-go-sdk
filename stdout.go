@@ -88,6 +88,7 @@ func (client *StdoutClient) Register(subscribeBuilder *SubscribeBuilder) error {
 }
 
 // Unregister print event to console
-func (client *StdoutClient) Unregister(topic string) {
+func (client *StdoutClient) Unregister(topic, eventName string) error {
 	//do nothing
+	return nil
 }

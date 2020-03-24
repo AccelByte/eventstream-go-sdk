@@ -219,11 +219,22 @@ func constructEvent(publishBuilder *PublishBuilder) (kafka.Message, *Event, erro
 }
 
 // Unregister unregister callback function and topic
-func (client *KafkaClient) Unregister(topic string) {
+func (client *KafkaClient) Unregister(topic, eventName string) error {
 	log.Debugf("unregister topic %s", topic)
-	if _, ok := client.subscribeMap.Load(topic); ok {
-		client.subscribeMap.Delete(topic)
+	if innerMap, ok := client.subscribeMap.Load(topic); ok {
+		callbackMap, ok := innerMap.(*sync.Map)
+		if !ok {
+			return errors.New("unable to convert interface to sync map")
+		}
+		if _, ok = callbackMap.Load(eventName); ok {
+			callbackMap.Delete(eventName)
+		}
+		client.subscribeMap.Store(topic, callbackMap)
+	} else {
+		return errors.New("topic not found")
 	}
+
+	return nil
 }
 
 // Register register callback function and then subscribe topic
@@ -267,7 +278,10 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 		for {
 			select {
 			case <-subscribeBuilder.ctx.Done():
-				client.Unregister(topic)
+				if errUnregister := client.Unregister(topic, subscribeBuilder.eventName); err != nil {
+					log.Error(fmt.Sprintf("unable to unregister event name callback. Topic: %s, Event Name: %s. error: %v",
+						topic, subscribeBuilder.eventName, errUnregister))
+				}
 				return
 			default:
 				consumerMessage, errRead := reader.ReadMessage(subscribeBuilder.ctx)
@@ -283,7 +297,7 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 }
 
 // registerCallback add callback to map with topic and eventName as a key
-func (client *KafkaClient) registerCallback(topic, eventName string, callback func(event *Event, err error)) (
+func (client *KafkaClient) registerCallback(topic, eventName string, callback func(ctx context.Context, event *Event, err error)) (
 	isRegistered bool, err error) {
 
 	if innerMap, ok := client.subscribeMap.Load(topic); ok {
@@ -353,15 +367,18 @@ func (client *KafkaClient) runCallback(event *Event, consumerMessage kafka.Messa
 		return
 	}
 
-	callback, ok := innerValue.(func(*Event, error))
+	callback, ok := innerValue.(func(context.Context, *Event, error))
 	if !ok {
 		log.Error("unable to convert interface to callback function")
 		return
 	}
 
+	ctx, ctxClose := context.WithCancel(context.Background())
+	defer ctxClose()
+
 	log.Debugf("run callback for topic: %s , event name: %s, groupID: %s", consumerMessage.Topic,
 		event.EventName, groupID)
-	go callback(&Event{
+	go callback(ctx, &Event{
 		ID:        event.ID,
 		ClientID:  event.ClientID,
 		EventName: event.EventName,
