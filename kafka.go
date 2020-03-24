@@ -57,6 +57,9 @@ type KafkaClient struct {
 
 	// map to store callback function
 	subscribeMap *sync.Map
+
+	// map to store callback context
+	callbackCtxMap *sync.Map
 }
 
 func setConfig(writerConfig *kafka.WriterConfig, readerConfig *kafka.ReaderConfig, config *BrokerConfig) {
@@ -120,6 +123,7 @@ func newKafkaClient(brokers []string, prefix string, config ...*BrokerConfig) *K
 		publishConfig:    *writerConfig,
 		subscribeConfig:  *readerConfig,
 		subscribeMap:     &sync.Map{},
+		callbackCtxMap:   &sync.Map{},
 	}
 }
 
@@ -218,18 +222,31 @@ func constructEvent(publishBuilder *PublishBuilder) (kafka.Message, *Event, erro
 
 }
 
-// Unregister unregister callback function and topic
-func (client *KafkaClient) Unregister(topic, eventName string) error {
+// unregister unregister callback function and topic
+func (client *KafkaClient) unregister(topic, eventName string) error {
 	log.Debugf("unregister topic %s", topic)
 	if innerMap, ok := client.subscribeMap.Load(topic); ok {
 		callbackMap, ok := innerMap.(*sync.Map)
 		if !ok {
-			return errors.New("unable to convert interface to sync map")
+			return errors.New("unable to convert interface to sync map of callback")
 		}
 		if _, ok = callbackMap.Load(eventName); ok {
 			callbackMap.Delete(eventName)
 		}
 		client.subscribeMap.Store(topic, callbackMap)
+	} else {
+		return errors.New("topic event callback not found")
+	}
+
+	if innerMap, ok := client.callbackCtxMap.Load(topic); ok {
+		callbackCtxMap, ok := innerMap.(*sync.Map)
+		if !ok {
+			return errors.New("unable to convert interface to sync map of callback context")
+		}
+		if _, ok = callbackCtxMap.Load(eventName); ok {
+			callbackCtxMap.Delete(eventName)
+		}
+		client.callbackCtxMap.Store(topic, callbackCtxMap)
 	} else {
 		return errors.New("topic not found")
 	}
@@ -266,6 +283,17 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 				subscribeBuilder.eventName)
 		}
 
+		isCallbackCtxRegistered, err := client.registerCallbackContext(topic, subscribeBuilder.eventName, subscribeBuilder.callbackCtx)
+		if err != nil {
+			log.Errorf("unable to register callback context. error: %v", err)
+			return
+		}
+
+		if isCallbackCtxRegistered {
+			log.Warnf("topic and event callback context already registered. topic: %s , event: %s", subscribeBuilder.topic,
+				subscribeBuilder.eventName)
+		}
+
 		config := client.subscribeConfig
 		config.Topic = topic
 		config.GroupID = groupID
@@ -278,7 +306,7 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 		for {
 			select {
 			case <-subscribeBuilder.ctx.Done():
-				if errUnregister := client.Unregister(topic, subscribeBuilder.eventName); err != nil {
+				if errUnregister := client.unregister(topic, subscribeBuilder.eventName); err != nil {
 					log.Error(fmt.Sprintf("unable to unregister event name callback. Topic: %s, Event Name: %s. error: %v",
 						topic, subscribeBuilder.eventName, errUnregister))
 				}
@@ -321,6 +349,32 @@ func (client *KafkaClient) registerCallback(topic, eventName string, callback fu
 	var callbackMap = &sync.Map{}
 	callbackMap.Store(eventName, callback)
 	client.subscribeMap.Store(topic, callbackMap)
+	return false, nil
+}
+
+func (client *KafkaClient) registerCallbackContext(topic, eventName string, ctx context.Context) (
+	isRegistered bool, err error) {
+	if innerMap, ok := client.callbackCtxMap.Load(topic); ok {
+		innerValue, ok := innerMap.(*sync.Map)
+		if !ok {
+			return false, errors.New("unable to convert interface to sync map")
+		}
+
+		if _, ok = innerValue.Load(eventName); ok {
+			return true, nil
+		}
+
+		// callback context with this topic name is there with another callback context registered, so append it
+		if innerValue != nil {
+			innerValue.Store(eventName, ctx)
+			client.callbackCtxMap.Store(topic, innerValue)
+			return false, nil
+		}
+	}
+
+	var callbackCtxMap = &sync.Map{}
+	callbackCtxMap.Store(eventName, ctx)
+	client.callbackCtxMap.Store(topic, callbackCtxMap)
 	return false, nil
 }
 
@@ -373,12 +427,25 @@ func (client *KafkaClient) runCallback(event *Event, consumerMessage kafka.Messa
 		return
 	}
 
-	ctx, ctxClose := context.WithCancel(context.Background())
-	defer ctxClose()
+	callbackCtx := context.Background()
+
+	callbackCtxValue, ok := client.callbackCtxMap.Load(consumerMessage.Topic)
+	if ok {
+		innerMap, ok := callbackCtxValue.(*sync.Map)
+		if ok {
+			innerValue, ok := innerMap.Load(event.EventName)
+			if ok {
+				ctx, ok := innerValue.(context.Context)
+				if ok {
+					callbackCtx = ctx
+				}
+			}
+		}
+	}
 
 	log.Debugf("run callback for topic: %s , event name: %s, groupID: %s", consumerMessage.Topic,
 		event.EventName, groupID)
-	go callback(ctx, &Event{
+	go callback(callbackCtx, &Event{
 		ID:        event.ID,
 		ClientID:  event.ClientID,
 		EventName: event.EventName,

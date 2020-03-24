@@ -159,11 +159,12 @@ func (p *PublishBuilder) Context(ctx context.Context) *PublishBuilder {
 
 // SubscribeBuilder defines the structure of message which is sent through message broker
 type SubscribeBuilder struct {
-	topic     string
-	groupID   string
-	callback  func(ctx context.Context, event *Event, err error)
-	eventName string
-	ctx       context.Context
+	topic       string
+	groupID     string
+	callback    func(ctx context.Context, event *Event, err error)
+	eventName   string
+	ctx         context.Context
+	callbackCtx context.Context
 }
 
 // NewSubscribe create new SubscribeBuilder instance
@@ -204,6 +205,12 @@ func (s *SubscribeBuilder) Context(ctx context.Context) *SubscribeBuilder {
 	return s
 }
 
+// CallbackContext define callback context to stop callback function.
+func (s *SubscribeBuilder) CallbackContext(ctx context.Context) *SubscribeBuilder {
+	s.callbackCtx = ctx
+	return s
+}
+
 func NewClient(prefix, stream string, brokers []string, config ...*BrokerConfig) (Client, error) {
 	switch stream {
 	case eventStreamNull:
@@ -221,5 +228,4 @@ func NewClient(prefix, stream string, brokers []string, config ...*BrokerConfig)
 type Client interface {
 	Publish(publishBuilder *PublishBuilder) error
 	Register(subscribeBuilder *SubscribeBuilder) error
-	Unregister(topic, eventName string) error
 }

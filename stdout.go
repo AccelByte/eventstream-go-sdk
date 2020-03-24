@@ -86,9 +86,3 @@ func (client *StdoutClient) Register(subscribeBuilder *SubscribeBuilder) error {
 	fmt.Println(string(eventByte))
 	return nil
 }
-
-// Unregister print event to console
-func (client *StdoutClient) Unregister(topic, eventName string) error {
-	//do nothing
-	return nil
-}
