@@ -100,7 +100,7 @@ err := client.Publish(
 			AdditionalFields(additionalFields map[string]interface{}).
 			Version(Version).
 			Payload(Payload).
-			ErrorCallback(func(ctx context.Context, event *Event, err error) {}))
+			ErrorCallback(func(event *Event, err error) {}))
 ```
 
 #### Parameter 
