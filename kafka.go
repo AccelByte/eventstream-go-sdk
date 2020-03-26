@@ -283,7 +283,7 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 				subscribeBuilder.eventName)
 		}
 
-		isCallbackCtxRegistered, err := client.registerCallbackContext(topic, subscribeBuilder.eventName, subscribeBuilder.callbackCtx)
+		isCallbackCtxRegistered, err := client.registerCallbackContext(topic, subscribeBuilder.eventName, subscribeBuilder.ctx)
 		if err != nil {
 			log.Errorf("unable to register callback context. error: %v", err)
 			return

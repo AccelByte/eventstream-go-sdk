@@ -45,7 +45,6 @@ func main() {
 			EventName("eventName").
 			Topic("topic").
 			Context(context.Background()).
-			CallbackContext(context.Background()).
 			Callback(func(ctx context.Context, event *eventstream.Event, err error) {
 				if err != nil {
 					logrus.Error(err)
