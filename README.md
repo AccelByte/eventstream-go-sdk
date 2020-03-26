@@ -100,7 +100,7 @@ err := client.Publish(
 			AdditionalFields(additionalFields map[string]interface{}).
 			Version(Version).
 			Payload(Payload).
-			ErrorCallback(func(event *Event, err error) {}))
+			ErrorCallback(func(ctx context.Context, event *Event, err error) {}))
 ```
 
 #### Parameter 
@@ -137,7 +137,7 @@ err := client.Register(
 			EventName(mockEvent.EventName).
 			GroupID(groupID).
 			Context(ctx).
-			Callback(func(event *Event, err error) {}))
+			Callback(func(ctx context.Context, event *Event, err error) {}))
 ```
 
 ### Unsubscribe
@@ -153,7 +153,7 @@ err := client.Register(
         EventName(mockEvent.EventName).
         GroupID(groupID).
         Context(ctx).
-        Callback(func(event *Event, err error) {
+        Callback(func(ctx context.Context, event *Event, err error) {
             if ctx.Error() != nil {
                 // unsubscribed
                 return
@@ -169,9 +169,10 @@ cancel() // cancel context to unsubscribe
 * Namespace : Event namespace. (string - alphaNumeric(256) - Required)
 * GroupID : Message broker group / queue ID. (string - alphaNumeric(256) - default: `*`)
 * Context : Golang context. (context - default: context.background)
-* Callback : Callback function when receive event. (func(event *Event, err error){} - required)
+* Callback : Callback function when receive event. (func(ctx context.Context,event *Event, err error){} - required)
 
-Callback function passing 2 parameters:
+Callback function passing 3 parameters:
+* ``ctx`` context to check that consumer unsubscribed 
 * ``event`` is object that store event message. 
 * ``err`` is an error that happen when consume the message.
 
