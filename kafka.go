@@ -287,7 +287,6 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 	reader := kafka.NewReader(config)
 
 	go func() {
-
 		defer reader.Close() // nolint: errcheck
 		defer client.unregister(subscribeBuilder)
 
@@ -313,8 +312,9 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 
 // registerSubscriber add callback to map with topic and eventName as a key
 func (client *KafkaClient) registerSubscriber(subscribeBuilder *SubscribeBuilder) (
-	isRegistered bool, err error) {
-
+	isRegistered bool,
+	err error,
+) {
 	client.lock.Lock()
 	defer client.lock.Unlock()
 

@@ -880,11 +880,12 @@ func TestKafkaRegisterMultipleSubscriberCallbackSuccess(t *testing.T) {
 	}
 }
 
+//nolint:funlen
 func TestKafkaUnregisterTopicSuccess(t *testing.T) {
 	ctx, done := context.WithTimeout(context.Background(), time.Duration(timeoutTest)*time.Second)
 	defer done()
 
-	doneChan := make(chan bool, 2)
+	doneChan := make(chan bool, 2) //nolint:gomnd
 
 	client := createKafkaClient(t)
 
@@ -919,6 +920,7 @@ func TestKafkaUnregisterTopicSuccess(t *testing.T) {
 	}
 
 	subscribeCtx, subscribeCancel := context.WithCancel(ctx)
+	defer subscribeCancel()
 
 	err = client.Register(
 		NewSubscribe().
@@ -957,11 +959,12 @@ func TestKafkaUnregisterTopicSuccess(t *testing.T) {
 	}
 
 	completions := 0
+
 	for {
 		select {
 		case <-doneChan:
 			completions++
-			if completions == 2 {
+			if completions == 2 { //nolint:gomnd
 				return
 			}
 		case <-ctx.Done():
