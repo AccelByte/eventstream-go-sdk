@@ -136,8 +136,31 @@ err := client.Register(
 			Topic(topicName).
 			EventName(mockEvent.EventName).
 			GroupID(groupID).
-			Context(Context).
+			Context(ctx).
 			Callback(func(event *Event, err error) {}))
+```
+
+### Unsubscribe
+To unsubscribe a topic from the stream, client should close passed context
+
+To unsubscribe from the topic, use this function:
+```go
+ctx, cancel := context.WithCancel(context.Background())
+
+err := client.Register(
+    NewSubscribe().
+        Topic(topicName).
+        EventName(mockEvent.EventName).
+        GroupID(groupID).
+        Context(ctx).
+        Callback(func(event *Event, err error) {
+            if ctx.Error() != nil {
+                // unsubscribed
+                return
+            }           
+        }))
+
+cancel() // cancel context to unsubscribe
 ```
 
 #### Parameter 

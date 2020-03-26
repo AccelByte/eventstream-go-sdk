@@ -17,6 +17,7 @@
 package eventstream
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -125,5 +126,5 @@ func TestStdoutSubscribe(t *testing.T) {
 		NewSubscribe().
 			Topic(topicName).
 			EventName(mockEvent.EventName).
-			Callback(func(event *Event, err error) {}))
+			Callback(func(ctx context.Context, event *Event, err error) {}))
 }

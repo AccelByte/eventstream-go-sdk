@@ -14,6 +14,7 @@ import (
 
 	"github.com/mitchellh/mapstructure"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 const (
@@ -105,7 +106,7 @@ func TestKafkaPubSubSuccess(t *testing.T) {
 			Topic(topicName).
 			EventName(mockEvent.EventName).
 			Context(ctx).
-			Callback(func(event *Event, err error) {
+			Callback(func(ctx context.Context, event *Event, err error) {
 				if ctx.Err() != nil {
 					return
 				}
@@ -139,10 +140,7 @@ func TestKafkaPubSubSuccess(t *testing.T) {
 				}
 				doneChan <- true
 			}))
-	if err != nil {
-		assert.FailNow(t, errorSubscribe, err)
-		return
-	}
+	require.NoError(t, err)
 
 	err = client.Publish(
 		NewPublish().
@@ -317,7 +315,7 @@ func TestKafkaPubSubMultipleTopicSuccess(t *testing.T) {
 			Topic(topicName1).
 			EventName(mockEvent.EventName).
 			Context(ctx).
-			Callback(func(event *Event, err error) {
+			Callback(func(ctx context.Context, event *Event, err error) {
 				if ctx.Err() != nil {
 					return
 				}
@@ -361,7 +359,7 @@ func TestKafkaPubSubMultipleTopicSuccess(t *testing.T) {
 			Topic(topicName2).
 			EventName(mockEvent.EventName).
 			Context(ctx).
-			Callback(func(event *Event, err error) {
+			Callback(func(ctx context.Context, event *Event, err error) {
 				if ctx.Err() != nil {
 					return
 				}
@@ -487,7 +485,7 @@ func TestKafkaPubSubDifferentGroupID(t *testing.T) {
 			EventName(mockEvent.EventName).
 			GroupID(groupID).
 			Context(ctx).
-			Callback(func(event *Event, err error) {
+			Callback(func(ctx context.Context, event *Event, err error) {
 				if ctx.Err() != nil {
 					return
 				}
@@ -532,7 +530,7 @@ func TestKafkaPubSubDifferentGroupID(t *testing.T) {
 			EventName(mockEvent.EventName).
 			GroupID(groupID2).
 			Context(ctx).
-			Callback(func(event *Event, err error) {
+			Callback(func(ctx context.Context, event *Event, err error) {
 				if ctx.Err() != nil {
 					return
 				}
@@ -566,10 +564,7 @@ func TestKafkaPubSubDifferentGroupID(t *testing.T) {
 				}
 				doneChan <- true
 			}))
-	if err != nil {
-		assert.Fail(t, errorSubscribe, err)
-		return
-	}
+	require.NoError(t, err)
 
 	err = client.Publish(
 		NewPublish().
@@ -655,7 +650,7 @@ func TestKafkaPubSubSameGroupID(t *testing.T) {
 			EventName(mockEvent.EventName).
 			GroupID(groupID).
 			Context(ctx).
-			Callback(func(event *Event, err error) {
+			Callback(func(ctx context.Context, event *Event, err error) {
 				if ctx.Err() != nil {
 					return
 				}
@@ -700,7 +695,7 @@ func TestKafkaPubSubSameGroupID(t *testing.T) {
 			EventName(mockEvent.EventName).
 			GroupID(groupID).
 			Context(ctx).
-			Callback(func(event *Event, err error) {
+			Callback(func(ctx context.Context, event *Event, err error) {
 				if ctx.Err() != nil {
 					return
 				}
@@ -817,7 +812,7 @@ func TestKafkaRegisterMultipleSubscriberCallbackSuccess(t *testing.T) {
 			Topic(topicName).
 			EventName(mockEvent.EventName).
 			Context(ctx).
-			Callback(func(_ *Event, err error) {
+			Callback(func(ctx context.Context, _ *Event, err error) {
 				if ctx.Err() != nil {
 					return
 				}
@@ -835,7 +830,7 @@ func TestKafkaRegisterMultipleSubscriberCallbackSuccess(t *testing.T) {
 			Topic("anotherevent").
 			EventName(mockEvent.EventName).
 			Context(ctx).
-			Callback(func(_ *Event, err error) {
+			Callback(func(ctx context.Context, _ *Event, err error) {
 				if ctx.Err() != nil {
 					return
 				}
@@ -879,6 +874,96 @@ func TestKafkaRegisterMultipleSubscriberCallbackSuccess(t *testing.T) {
 		select {
 		case <-doneChan:
 			return
+		case <-ctx.Done():
+			assert.FailNow(t, errorTimeout)
+		}
+	}
+}
+
+func TestKafkaUnregisterTopicSuccess(t *testing.T) {
+	ctx, done := context.WithTimeout(context.Background(), time.Duration(timeoutTest)*time.Second)
+	defer done()
+
+	doneChan := make(chan bool, 2)
+
+	client := createKafkaClient(t)
+
+	topicName := constructTopicTest()
+
+	var mockPayload = make(map[string]interface{})
+	mockPayload[testPayload] = "testPayload"
+	mockEvent := &Event{
+		EventName: "testEvent",
+		Namespace: "event",
+		ClientID:  "7d480ce0e8624b02901bd80d9ba9817c",
+		TraceID:   "01c34ec3b07f4bfaa59ba0184a3de14d",
+		UserID:    "e95b150043ff4a2c88427a6eb25e5bc8",
+		Version:   defaultVersion,
+		Payload:   mockPayload,
+	}
+
+	err := client.Register(
+		NewSubscribe().
+			Topic(topicName).
+			EventName(mockEvent.EventName).
+			Context(ctx).
+			Callback(func(ctx context.Context, _ *Event, err error) {
+				require.NoError(t, err)
+				require.NoError(t, ctx.Err())
+
+				doneChan <- true
+			}))
+	if err != nil {
+		assert.FailNow(t, errorSubscribe, err)
+		return
+	}
+
+	subscribeCtx, subscribeCancel := context.WithCancel(ctx)
+
+	err = client.Register(
+		NewSubscribe().
+			Topic("anotherevent").
+			EventName(mockEvent.EventName).
+			Context(subscribeCtx).
+			Callback(func(ctx context.Context, event *Event, err error) {
+				if ctx.Err() != nil {
+					doneChan <- true
+				}
+
+				require.Nil(t, event) // unregistered subscriber should not receive events
+			}))
+	if err != nil {
+		assert.FailNow(t, errorSubscribe, err)
+		return
+	}
+
+	// unregister subscription
+	subscribeCancel()
+
+	err = client.Publish(
+		NewPublish().
+			Topic(topicName).
+			EventName(mockEvent.EventName).
+			Namespace(mockEvent.Namespace).
+			ClientID(mockEvent.ClientID).
+			UserID(mockEvent.UserID).
+			SessionID(mockEvent.SessionID).
+			TraceID(mockEvent.TraceID).
+			Context(context.Background()).
+			Payload(mockPayload))
+	if err != nil {
+		assert.FailNow(t, errorPublish, err)
+		return
+	}
+
+	completions := 0
+	for {
+		select {
+		case <-doneChan:
+			completions++
+			if completions == 2 {
+				return
+			}
 		case <-ctx.Done():
 			assert.FailNow(t, errorTimeout)
 		}
