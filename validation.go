@@ -5,6 +5,7 @@
 package eventstream
 
 import (
+	"context"
 	"errors"
 
 	validator "github.com/AccelByte/justice-input-validation-go"
@@ -79,7 +80,7 @@ func validateSubscribeEvent(subscribeBuilder *SubscribeBuilder) error {
 		Topic     string `valid:"required"`
 		EventName string `valid:"alphanum,stringlength(1|256),required"`
 		GroupID   string
-		Callback  func(event *Event, err error)
+		Callback  func(ctx context.Context, event *Event, err error)
 	}{
 		Topic:     subscribeBuilder.topic,
 		EventName: subscribeBuilder.eventName,

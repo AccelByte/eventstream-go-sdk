@@ -136,8 +136,31 @@ err := client.Register(
 			Topic(topicName).
 			EventName(mockEvent.EventName).
 			GroupID(groupID).
-			Context(Context).
-			Callback(func(event *Event, err error) {}))
+			Context(ctx).
+			Callback(func(ctx context.Context, event *Event, err error) {}))
+```
+
+### Unsubscribe
+To unsubscribe a topic from the stream, client should close passed context
+
+To unsubscribe from the topic, use this function:
+```go
+ctx, cancel := context.WithCancel(context.Background())
+
+err := client.Register(
+    NewSubscribe().
+        Topic(topicName).
+        EventName(mockEvent.EventName).
+        GroupID(groupID).
+        Context(ctx).
+        Callback(func(ctx context.Context, event *Event, err error) {
+            if ctx.Error() != nil {
+                // unsubscribed
+                return
+            }           
+        }))
+
+cancel() // cancel context to unsubscribe
 ```
 
 #### Parameter 
@@ -146,9 +169,10 @@ err := client.Register(
 * Namespace : Event namespace. (string - alphaNumeric(256) - Required)
 * GroupID : Message broker group / queue ID. (string - alphaNumeric(256) - default: `*`)
 * Context : Golang context. (context - default: context.background)
-* Callback : Callback function when receive event. (func(event *Event, err error){} - required)
+* Callback : Callback function when receive event. (func(ctx context.Context,event *Event, err error){} - required)
 
-Callback function passing 2 parameters:
+Callback function passing 3 parameters:
+* ``ctx`` context to check that consumer unsubscribed 
 * ``event`` is object that store event message. 
 * ``err`` is an error that happen when consume the message.
 

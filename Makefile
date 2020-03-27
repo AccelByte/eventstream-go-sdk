@@ -27,3 +27,6 @@ coverage:
 
 run:
 	docker-compose -f docker-compose-test.yml up
+
+lint:
+	golangci-lint run --enable-all

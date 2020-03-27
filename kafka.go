@@ -56,8 +56,11 @@ type KafkaClient struct {
 	// subscribe configuration
 	subscribeConfig kafka.ReaderConfig
 
-	// map to store callback function
-	subscribeMap *sync.Map
+	// current subscribers
+	subscribers map[*SubscribeBuilder]struct{}
+
+	// mutex to avoid runtime races to access subscribers map
+	lock sync.RWMutex
 }
 
 func setConfig(writerConfig *kafka.WriterConfig, readerConfig *kafka.ReaderConfig, config *BrokerConfig) {
@@ -123,7 +126,7 @@ func newKafkaClient(brokers []string, prefix string, config ...*BrokerConfig) *K
 		strictValidation: strictValidation,
 		publishConfig:    *writerConfig,
 		subscribeConfig:  *readerConfig,
-		subscribeMap:     &sync.Map{},
+		subscribers:      make(map[*SubscribeBuilder]struct{}),
 	}
 }
 
@@ -238,6 +241,11 @@ func ConstructEvent(publishBuilder *PublishBuilder) (kafka.Message, *Event, erro
 	}, event, nil
 }
 
+// unregister unregister subscriber
+func (client *KafkaClient) unregister(subscribeBuilder *SubscribeBuilder) {
+	delete(client.subscribers, subscribeBuilder)
+}
+
 // Register register callback function and then subscribe topic
 func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 	if subscribeBuilder == nil {
@@ -254,79 +262,78 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 		return err
 	}
 
+	topic := constructTopic(client.prefix, subscribeBuilder.topic)
+	groupID := constructGroupID(subscribeBuilder.groupID)
+
+	isRegistered, err := client.registerSubscriber(subscribeBuilder)
+	if err != nil {
+		log.Errorf("unable to register callback. error: %v", err)
+		return err
+	}
+
+	if isRegistered {
+		return fmt.Errorf(
+			"topic and event already registered. topic: %s , event: %s",
+			subscribeBuilder.topic,
+			subscribeBuilder.eventName,
+		)
+	}
+
+	config := client.subscribeConfig
+	config.Topic = topic
+	config.GroupID = groupID
+	config.StartOffset = kafka.LastOffset
+	config.MaxWait = kafkaMaxWait
+	reader := kafka.NewReader(config)
+
 	go func() {
-		topic := constructTopic(client.prefix, subscribeBuilder.topic)
-		groupID := constructGroupID(subscribeBuilder.groupID)
-
-		isRegistered, err := client.registerCallback(topic, subscribeBuilder.eventName, subscribeBuilder.callback)
-		if err != nil {
-			log.Errorf("unable to register callback. error: %v", err)
-			return
-		}
-
-		if isRegistered {
-			log.Warnf("topic and event already registered. topic: %s , event: %s", subscribeBuilder.topic,
-				subscribeBuilder.eventName)
-		}
-
-		config := client.subscribeConfig
-		config.Topic = topic
-		config.GroupID = groupID
-		config.StartOffset = kafka.LastOffset
-		config.MaxWait = kafkaMaxWait
-		reader := kafka.NewReader(config)
-
-		defer func() {
-			_ = reader.Close()
-		}()
+		defer reader.Close() // nolint: errcheck
+		defer client.unregister(subscribeBuilder)
 
 		for {
-			consumerMessage, err := reader.ReadMessage(subscribeBuilder.ctx)
-			if err != nil {
-				log.Error("unable to subscribe topic from kafka. error: ", err)
+			select {
+			case <-subscribeBuilder.ctx.Done():
+				subscribeBuilder.callback(subscribeBuilder.ctx, nil, subscribeBuilder.ctx.Err())
 				return
-			}
+			default:
+				consumerMessage, errRead := reader.ReadMessage(subscribeBuilder.ctx)
+				if errRead != nil {
+					log.Error("unable to subscribe topic from kafka. error: ", errRead)
+					return
+				}
 
-			go client.processMessage(consumerMessage, groupID)
+				client.processMessage(subscribeBuilder, consumerMessage)
+			}
 		}
 	}()
 
 	return nil
 }
 
-// registerCallback add callback to map with topic and eventName as a key
-func (client *KafkaClient) registerCallback(topic, eventName string, callback func(event *Event, err error)) (
-	isRegistered bool, err error) {
-	if innerMap, ok := client.subscribeMap.Load(topic); ok {
-		innerValue, ok := innerMap.(*sync.Map)
-		if !ok {
-			return false, errors.New("unable to convert interface to sync map")
-		}
+// registerSubscriber add callback to map with topic and eventName as a key
+func (client *KafkaClient) registerSubscriber(subscribeBuilder *SubscribeBuilder) (
+	isRegistered bool,
+	err error,
+) {
+	client.lock.Lock()
+	defer client.lock.Unlock()
 
-		if _, ok = innerValue.Load(eventName); ok {
-			return true, nil
-		}
-
-		// event callback with this topic name is there with another event callback registered, so append it
-		if innerValue != nil {
-			innerValue.Store(eventName, callback)
-			client.subscribeMap.Store(topic, innerValue)
-
-			return false, nil
+	for subs := range client.subscribers {
+		if subs.topic == subscribeBuilder.topic && subs.eventName == subscribeBuilder.eventName {
+			if subscribeBuilder.groupID == "" {
+				return true, nil
+			}
 		}
 	}
 
-	var callbackMap = &sync.Map{}
-
-	callbackMap.Store(eventName, callback)
-	client.subscribeMap.Store(topic, callbackMap)
+	client.subscribers[subscribeBuilder] = struct{}{}
 
 	return false, nil
 }
 
 // processMessage process a message from kafka
-func (client *KafkaClient) processMessage(message kafka.Message, groupID string) {
-	log.Debugf("process message from topic: %s, groupID : %s", message.Topic, groupID)
+func (client *KafkaClient) processMessage(subscribeBuilder *SubscribeBuilder, message kafka.Message) {
+	log.Debugf("process message from topic: %s, groupID : %s", message.Topic, subscribeBuilder.groupID)
 
 	event, err := unmarshal(message)
 	if err != nil {
@@ -334,7 +341,12 @@ func (client *KafkaClient) processMessage(message kafka.Message, groupID string)
 		return
 	}
 
-	client.runCallback(event, message, groupID)
+	if subscribeBuilder.eventName != "" && subscribeBuilder.eventName != event.EventName {
+		// don't send events if consumer subscribed on a non-empty event name
+		return
+	}
+
+	client.runCallback(subscribeBuilder, event, message)
 }
 
 // unmarshal unmarshal received message into event struct
@@ -350,36 +362,15 @@ func unmarshal(message kafka.Message) (*Event, error) {
 }
 
 // runCallback run callback function when receive an event
-func (client *KafkaClient) runCallback(event *Event, consumerMessage kafka.Message, groupID string) {
-	value, ok := client.subscribeMap.Load(consumerMessage.Topic)
-	if !ok {
-		log.Errorf("callback not found for topic: %s", consumerMessage.Topic)
-		return
-	}
-
-	innerMap, ok := value.(*sync.Map)
-	if !ok {
-		log.Error("unable to convert interface to sync map")
-		return
-	}
-
-	innerValue, ok := innerMap.Load(event.EventName)
-	if !ok {
-		log.Errorf("callback not found for topic: %s, event name: %s", consumerMessage.Topic,
-			event.EventName)
-		return
-	}
-
-	callback, ok := innerValue.(func(*Event, error))
-	if !ok {
-		log.Error("unable to convert interface to callback function")
-		return
-	}
-
+func (client *KafkaClient) runCallback(
+	subscribeBuilder *SubscribeBuilder,
+	event *Event,
+	consumerMessage kafka.Message,
+) {
 	log.Debugf("run callback for topic: %s , event name: %s, groupID: %s", consumerMessage.Topic,
-		event.EventName, groupID)
+		event.EventName, subscribeBuilder.groupID)
 
-	go callback(&Event{
+	subscribeBuilder.callback(subscribeBuilder.ctx, &Event{
 		ID:               event.ID,
 		ClientID:         event.ClientID,
 		EventName:        event.EventName,
