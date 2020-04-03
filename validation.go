@@ -79,7 +79,7 @@ func validateSubscribeEvent(subscribeBuilder *SubscribeBuilder) error {
 	subscribeEvent := struct {
 		Topic     string `valid:"required"`
 		EventName string `valid:"alphanum,stringlength(1|256),required"`
-		GroupID   string
+		GroupID   string `valid:"alphanum,stringlength(1|256),required"`
 		Callback  func(ctx context.Context, event *Event, err error)
 	}{
 		Topic:     subscribeBuilder.topic,

@@ -14,7 +14,7 @@ go get -u github.com/AccelByte/eventstream-go-sdk
 ### Importing
 
 ```go
-eventstream "github.com/AccelByte/eventstream-go-sdk"
+eventstream "github.com/AccelByte/eventstream-go-sdk/v2"
 ```
 
 To create a new event stream client, use this function:
