@@ -263,7 +263,7 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 	}
 
 	topic := constructTopic(client.prefix, subscribeBuilder.topic)
-	groupID := constructGroupID(subscribeBuilder.groupID)
+	groupID := constructGroupID(client.prefix, subscribeBuilder.groupID)
 
 	isRegistered, err := client.registerSubscriber(subscribeBuilder)
 	if err != nil {

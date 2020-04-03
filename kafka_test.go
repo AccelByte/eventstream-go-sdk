@@ -303,6 +303,7 @@ func TestKafkaSubNilCallback(t *testing.T) {
 		NewSubscribe().
 			Topic(topicName).
 			EventName(mockEvent.EventName).
+			GroupID(generateID()).
 			Callback(nil))
 
 	assert.Equal(t, errInvalidCallback, err, "error should be equal")

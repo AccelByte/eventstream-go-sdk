@@ -105,6 +105,7 @@ func TestKafkaPubSubSuccess(t *testing.T) {
 		NewSubscribe().
 			Topic(topicName).
 			EventName(mockEvent.EventName).
+			GroupID(generateID()).
 			Context(ctx).
 			Callback(func(ctx context.Context, event *Event, err error) {
 				if ctx.Err() != nil {
@@ -314,6 +315,7 @@ func TestKafkaPubSubMultipleTopicSuccess(t *testing.T) {
 		NewSubscribe().
 			Topic(topicName1).
 			EventName(mockEvent.EventName).
+			GroupID(generateID()).
 			Context(ctx).
 			Callback(func(ctx context.Context, event *Event, err error) {
 				if ctx.Err() != nil {
@@ -358,6 +360,7 @@ func TestKafkaPubSubMultipleTopicSuccess(t *testing.T) {
 		NewSubscribe().
 			Topic(topicName2).
 			EventName(mockEvent.EventName).
+			GroupID(generateID()).
 			Context(ctx).
 			Callback(func(ctx context.Context, event *Event, err error) {
 				if ctx.Err() != nil {
@@ -610,7 +613,7 @@ func TestKafkaPubSubSameGroupID(t *testing.T) {
 	ctx, done := context.WithTimeout(context.Background(), time.Duration(timeoutTest)*time.Second)
 	defer done()
 
-	doneChan := make(chan bool, 1)
+	doneChan := make(chan bool, 2)
 
 	client := createKafkaClient(t)
 
@@ -761,12 +764,27 @@ func TestKafkaPubSubSameGroupID(t *testing.T) {
 		return
 	}
 
-	select {
-	case <-doneChan:
-		return
-	case <-ctx.Done():
-		assert.FailNow(t, errorTimeout)
+	awaitDurationTimer := time.NewTimer(time.Duration(timeoutTest) * time.Second / 2)
+	defer awaitDurationTimer.Stop()
+
+	doneItr := 0
+L:
+	for {
+		select {
+		case <-doneChan:
+			doneItr++
+			if doneItr > 1 {
+				// expected to receive only one message
+				break L
+			}
+		case <-awaitDurationTimer.C:
+			// enough, let's go to check the number of triggered callbacks
+			break L
+		}
 	}
+
+	// only one subscriber should receive the event because there is the same subscription-group
+	require.Equal(t, 1, doneItr)
 }
 
 // nolint:funlen
@@ -807,10 +825,12 @@ func TestKafkaRegisterMultipleSubscriberCallbackSuccess(t *testing.T) {
 		Payload:          mockPayload,
 	}
 
+	groupID := generateID()
 	err := client.Register(
 		NewSubscribe().
 			Topic(topicName).
 			EventName(mockEvent.EventName).
+			GroupID(groupID).
 			Context(ctx).
 			Callback(func(ctx context.Context, _ *Event, err error) {
 				if ctx.Err() != nil {
@@ -820,15 +840,13 @@ func TestKafkaRegisterMultipleSubscriberCallbackSuccess(t *testing.T) {
 				assert.NoError(t, err, "there's error right before event consumed: %v", err)
 				doneChan <- true
 			}))
-	if err != nil {
-		assert.FailNow(t, errorSubscribe, err)
-		return
-	}
+	require.NoError(t, err)
 
 	err = client.Register(
 		NewSubscribe().
 			Topic("anotherevent").
 			EventName(mockEvent.EventName).
+			GroupID(groupID).
 			Context(ctx).
 			Callback(func(ctx context.Context, _ *Event, err error) {
 				if ctx.Err() != nil {
@@ -907,6 +925,7 @@ func TestKafkaUnregisterTopicSuccess(t *testing.T) {
 		NewSubscribe().
 			Topic(topicName).
 			EventName(mockEvent.EventName).
+			GroupID(generateID()).
 			Context(ctx).
 			Callback(func(ctx context.Context, _ *Event, err error) {
 				require.NoError(t, err)
@@ -926,6 +945,7 @@ func TestKafkaUnregisterTopicSuccess(t *testing.T) {
 		NewSubscribe().
 			Topic("anotherevent").
 			EventName(mockEvent.EventName).
+			GroupID(generateID()).
 			Context(subscribeCtx).
 			Callback(func(ctx context.Context, event *Event, err error) {
 				if ctx.Err() != nil {
