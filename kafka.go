@@ -251,6 +251,7 @@ func (client *KafkaClient) unregister(subscribeBuilder *SubscribeBuilder) {
 }
 
 // Register register callback function and then subscribe topic
+//nolint: gocognit,funlen
 func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 	if subscribeBuilder == nil {
 		log.Error(errSubNilEvent)

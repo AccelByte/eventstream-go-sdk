@@ -900,7 +900,7 @@ func TestKafkaRegisterMultipleSubscriberCallbackSuccess(t *testing.T) {
 			}))
 	require.NoError(t, err)
 
-	time.Sleep(time.Second * 5)
+	time.Sleep(time.Second * 5) // nolint:gomnd
 
 	err = client.Publish(
 		NewPublish().
@@ -1007,7 +1007,7 @@ func TestKafkaUnregisterTopicSuccess(t *testing.T) {
 	// unregister subscription
 	subscribeCancel()
 
-	time.Sleep(time.Second * 5)
+	time.Sleep(time.Second * 5) // nolint:gomnd
 
 	err = client.Publish(
 		NewPublish().

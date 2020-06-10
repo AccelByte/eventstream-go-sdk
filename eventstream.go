@@ -283,7 +283,9 @@ func (s *SubscribeBuilder) EventName(eventName string) *SubscribeBuilder {
 }
 
 // Callback to do when the event received
-func (s *SubscribeBuilder) Callback(callback func(ctx context.Context, event *Event, err error) error) *SubscribeBuilder {
+func (s *SubscribeBuilder) Callback(
+	callback func(ctx context.Context, event *Event, err error) error,
+) *SubscribeBuilder {
 	s.callback = callback
 	return s
 }

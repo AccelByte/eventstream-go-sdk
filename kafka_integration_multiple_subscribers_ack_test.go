@@ -18,19 +18,21 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// nolint:funlen
 func TestMultipleSubscriptionsEventuallyProcessAllEvents(t *testing.T) {
-	testTimeoutDuration := time.Duration(timeoutTest) * time.Second * 10
+	testTimeoutDuration := time.Duration(timeoutTest) * time.Second * 10 // nolint:gomnd
+
 	ctx, done := context.WithTimeout(context.Background(), testTimeoutDuration)
 	defer done()
 
-	doneChan := make(chan bool, 20000)
+	doneChan := make(chan bool, 20000) // nolint:gomnd
 
 	client := createKafkaClient(t)
 
 	topicName := constructTopicTest()
 
 	var mockPayload = make(map[string]interface{})
-	mockPayload[testPayload] = "testPayload"
+	mockPayload[testPayload] = "testPayload" // nolint:goconst
 
 	mockAdditionalFields := map[string]interface{}{
 		"summary": "user:_failed",
@@ -60,6 +62,7 @@ func TestMultipleSubscriptionsEventuallyProcessAllEvents(t *testing.T) {
 
 	// init event counters
 	processedEvents := make(map[int]int64) // map[event-id]count. used to count all processed events
+
 	var processedEventsMutex sync.Mutex
 
 	groupID := generateID()
@@ -111,11 +114,10 @@ func TestMultipleSubscriptionsEventuallyProcessAllEvents(t *testing.T) {
 						return nil
 					}))
 			require.NoError(t, err)
-
 		}(i)
 	}
 
-	time.Sleep(time.Second * 5)
+	time.Sleep(time.Second * 5) // nolint:gomnd
 
 	numberOfEvents := 2000
 
