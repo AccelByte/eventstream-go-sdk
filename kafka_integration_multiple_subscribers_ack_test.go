@@ -119,7 +119,7 @@ func TestMultipleSubscriptionsEventuallyProcessAllEvents(t *testing.T) {
 
 	time.Sleep(time.Second * 5) // nolint:gomnd
 
-	numberOfEvents := 2000
+	numberOfEvents := 200
 
 	// publish few thousand of events
 	for i := 0; i < numberOfEvents; i++ {
