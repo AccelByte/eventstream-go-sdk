@@ -27,6 +27,7 @@ import (
 
 	"github.com/cenkalti/backoff"
 	"github.com/segmentio/kafka-go"
+	"github.com/sirupsen/logrus"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -243,6 +244,9 @@ func ConstructEvent(publishBuilder *PublishBuilder) (kafka.Message, *Event, erro
 
 // unregister unregister subscriber
 func (client *KafkaClient) unregister(subscribeBuilder *SubscribeBuilder) {
+	client.lock.Lock()
+	defer client.lock.Unlock()
+
 	delete(client.subscribers, subscribeBuilder)
 }
 
@@ -287,22 +291,53 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 	reader := kafka.NewReader(config)
 
 	go func() {
-		defer reader.Close() // nolint: errcheck
+		var eventProcessingFailed bool
+
+		defer func() {
+			if eventProcessingFailed {
+				if subscribeBuilder.ctx.Err() != nil {
+					// subscription cancelled globally using context cancellation
+					return
+				}
+
+				// current worker can't process the event and we need to unblock the event for other workers
+				// as we use kafka in the explicit commit mode - we can't send the "acknowledge" and have to interrupt connection
+				time.Sleep(time.Second)
+
+				err := client.Register(subscribeBuilder)
+				if err != nil {
+					logrus.Error(err)
+				}
+			}
+		}()
 		defer client.unregister(subscribeBuilder)
+		defer reader.Close() // nolint: errcheck
 
 		for {
 			select {
 			case <-subscribeBuilder.ctx.Done():
-				subscribeBuilder.callback(subscribeBuilder.ctx, nil, subscribeBuilder.ctx.Err())
+				// ignore error because client isn't processing events
+				_ = subscribeBuilder.callback(subscribeBuilder.ctx, nil, subscribeBuilder.ctx.Err())
+
 				return
 			default:
-				consumerMessage, errRead := reader.ReadMessage(subscribeBuilder.ctx)
+				consumerMessage, errRead := reader.FetchMessage(subscribeBuilder.ctx)
 				if errRead != nil {
 					log.Error("unable to subscribe topic from kafka. error: ", errRead)
 					return
 				}
 
-				client.processMessage(subscribeBuilder, consumerMessage)
+				err := client.processMessage(subscribeBuilder, consumerMessage)
+				if err != nil {
+					// shutdown current subscriber and mark it for restarting
+					eventProcessingFailed = true
+					return
+				}
+
+				err = reader.CommitMessages(subscribeBuilder.ctx, consumerMessage)
+				if err != nil {
+					log.Error("unable to commit the event. error: ", err)
+				}
 			}
 		}
 	}()
@@ -332,21 +367,24 @@ func (client *KafkaClient) registerSubscriber(subscribeBuilder *SubscribeBuilder
 }
 
 // processMessage process a message from kafka
-func (client *KafkaClient) processMessage(subscribeBuilder *SubscribeBuilder, message kafka.Message) {
+func (client *KafkaClient) processMessage(subscribeBuilder *SubscribeBuilder, message kafka.Message) error {
 	log.Debugf("process message from topic: %s, groupID : %s", message.Topic, subscribeBuilder.groupID)
 
 	event, err := unmarshal(message)
 	if err != nil {
 		log.Error("unable to unmarshal message from subscribe in kafka. error: ", err)
-		return
+
+		// as retry will fail infinitely - return nil to ACK the event
+		return nil
 	}
 
 	if subscribeBuilder.eventName != "" && subscribeBuilder.eventName != event.EventName {
 		// don't send events if consumer subscribed on a non-empty event name
-		return
+		// return nil to ACK the event
+		return nil
 	}
 
-	client.runCallback(subscribeBuilder, event, message)
+	return client.runCallback(subscribeBuilder, event, message)
 }
 
 // unmarshal unmarshal received message into event struct
@@ -366,11 +404,11 @@ func (client *KafkaClient) runCallback(
 	subscribeBuilder *SubscribeBuilder,
 	event *Event,
 	consumerMessage kafka.Message,
-) {
+) error {
 	log.Debugf("run callback for topic: %s , event name: %s, groupID: %s", consumerMessage.Topic,
 		event.EventName, subscribeBuilder.groupID)
 
-	subscribeBuilder.callback(subscribeBuilder.ctx, &Event{
+	return subscribeBuilder.callback(subscribeBuilder.ctx, &Event{
 		ID:               event.ID,
 		ClientID:         event.ClientID,
 		EventName:        event.EventName,

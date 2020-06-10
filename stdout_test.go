@@ -126,5 +126,7 @@ func TestStdoutSubscribe(t *testing.T) {
 		NewSubscribe().
 			Topic(topicName).
 			EventName(mockEvent.EventName).
-			Callback(func(ctx context.Context, event *Event, err error) {}))
+			Callback(func(ctx context.Context, event *Event, err error) error {
+				return nil
+			}))
 }

@@ -16,24 +16,29 @@
 version: '3'
 services:
   zookeeper:
-    image: wurstmeister/zookeeper
+    image: wurstmeister/zookeeper:3.4.6
     ports:
       - "2181:2181"
     expose:
       - "2181"
 
   kafka:
-    image: wurstmeister/kafka
+    image: wurstmeister/kafka:2.12-2.5.0
     ports:
       - "9092:9092"
     expose:
       - "9092"
     depends_on:
       - zookeeper
-    links:
-      - zookeeper
     environment:
       - KAFKA_BROKER_ID=1
       - KAFKA_ADVERTISED_PORT=9092
-      - KAFKA_ADVERTISED_HOST_NAME=localhost
+      - KAFKA_ADVERTISED_HOST_NAME=kafka
       - KAFKA_ZOOKEEPER_CONNECT=zookeeper:2181
+
+  ui:
+    image: obsidiandynamics/kafdrop:3.26.0
+    ports:
+      - "9000:9000"
+    environment:
+      - KAFKA_BROKERCONNECT=kafka:9092

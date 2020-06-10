@@ -80,7 +80,7 @@ func validateSubscribeEvent(subscribeBuilder *SubscribeBuilder) error {
 		Topic     string `valid:"required"`
 		EventName string `valid:"alphanum,stringlength(1|256),required"`
 		GroupID   string `valid:"alphanum,stringlength(1|256),required"`
-		Callback  func(ctx context.Context, event *Event, err error)
+		Callback  func(ctx context.Context, event *Event, err error) error
 	}{
 		Topic:     subscribeBuilder.topic,
 		EventName: subscribeBuilder.eventName,

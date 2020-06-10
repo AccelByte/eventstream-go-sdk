@@ -263,8 +263,8 @@ func TestKafkaSubWithEmptyTopic(t *testing.T) {
 	err := client.Register(
 		NewSubscribe().
 			EventName(mockEvent.EventName).
-			Callback(func(ctx context.Context, event *Event, err error) {
-
+			Callback(func(ctx context.Context, event *Event, err error) error {
+				return nil
 			}))
 
 	assert.Equal(t, errInvalidSubStruct, err, "error should be equal")
@@ -283,8 +283,8 @@ func TestKafkaSubInvalidEventStruct(t *testing.T) {
 		NewSubscribe().
 			Topic(topicName).
 			EventName(mockEvent.EventName).
-			Callback(func(ctx context.Context, event *Event, err error) {
-
+			Callback(func(ctx context.Context, event *Event, err error) error {
+				return nil
 			}))
 
 	assert.Equal(t, errInvalidSubStruct, err, "error should be equal")

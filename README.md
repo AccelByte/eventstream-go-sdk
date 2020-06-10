@@ -136,8 +136,9 @@ err := client.Register(
 			Topic(topicName).
 			EventName(mockEvent.EventName).
 			GroupID(groupID).
+			Offset(offset).
 			Context(ctx).
-			Callback(func(ctx context.Context, event *Event, err error) {}))
+			Callback(func(ctx context.Context, event *Event, err error) error { return nil }))
 ```
 
 ### Unsubscribe
@@ -153,11 +154,13 @@ err := client.Register(
         EventName(mockEvent.EventName).
         GroupID(groupID).
         Context(ctx).
-        Callback(func(ctx context.Context, event *Event, err error) {
+        Callback(func(ctx context.Context, event *Event, err error) error {
             if ctx.Error() != nil {
                 // unsubscribed
-                return
+                return nil
             }           
+
+            return nil
         }))
 
 cancel() // cancel context to unsubscribe
@@ -169,12 +172,17 @@ cancel() // cancel context to unsubscribe
 * Namespace : Event namespace. (string - alphaNumeric(256) - Required)
 * GroupID : Message broker group / queue ID. (string - alphaNumeric(256) - default: `*`)
 * Context : Golang context. (context - default: context.background)
-* Callback : Callback function when receive event. (func(ctx context.Context,event *Event, err error){} - required)
+* Callback : Callback function when receive event. (func(ctx context.Context,event *Event, err error) error {} - required)
+* Offset : Offset(position) inside the topic from which processing begins(int64 - Optional - default: `-1` (the tail))
 
 Callback function passing 3 parameters:
 * ``ctx`` context to check that consumer unsubscribed 
 * ``event`` is object that store event message. 
 * ``err`` is an error that happen when consume the message.
+
+Callback function return 1 result(error):
+* return `nil` to commit the event(mark as processed)
+* return any error to retry processing(worker will be selected randomly)
 
 ## Event Message
 Event message is a set of event information that would be publish or consume by client.
