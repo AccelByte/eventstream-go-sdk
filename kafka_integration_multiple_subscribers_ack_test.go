@@ -20,7 +20,7 @@ import (
 
 // nolint:funlen
 func TestMultipleSubscriptionsEventuallyProcessAllEvents(t *testing.T) {
-	testTimeoutDuration := time.Duration(timeoutTest) * time.Second * 4
+	testTimeoutDuration := time.Duration(timeoutTest) * time.Second * 4 //nolint:gomnd
 
 	ctx, done := context.WithTimeout(context.Background(), testTimeoutDuration)
 	defer done()
