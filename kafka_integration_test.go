@@ -956,6 +956,10 @@ func TestKafkaUnregisterTopicSuccess(t *testing.T) {
 			Offset(0).
 			Context(ctx).
 			Callback(func(ctx context.Context, _ *Event, err error) error {
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
+
 				require.NoError(t, err)
 				require.NoError(t, ctx.Err())
 

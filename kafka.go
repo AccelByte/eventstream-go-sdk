@@ -296,7 +296,7 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 		defer func() {
 			if eventProcessingFailed {
 				if subscribeBuilder.ctx.Err() != nil {
-					// subscription cancelled globally using context cancellation
+					// the subscription is shutting down. triggered by an external context cancellation
 					return
 				}
 
@@ -323,7 +323,12 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 			default:
 				consumerMessage, errRead := reader.FetchMessage(subscribeBuilder.ctx)
 				if errRead != nil {
-					log.Error("unable to subscribe topic from kafka. error: ", errRead)
+					if subscribeBuilder.ctx.Err() != nil {
+						// the subscription is shutting down. triggered by an external context cancellation
+						continue
+					}
+
+					log.Errorf("unable to subscribe topic from kafka. error: %s", errRead)
 					return
 				}
 
@@ -336,6 +341,11 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 
 				err = reader.CommitMessages(subscribeBuilder.ctx, consumerMessage)
 				if err != nil {
+					if subscribeBuilder.ctx.Err() == nil {
+						// the subscription is shutting down. triggered by an external context cancellation
+						continue
+					}
+
 					log.Error("unable to commit the event. error: ", err)
 				}
 			}
