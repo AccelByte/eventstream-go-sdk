@@ -20,12 +20,12 @@ import (
 
 // nolint:funlen
 func TestMultipleSubscriptionsEventuallyProcessAllEvents(t *testing.T) {
-	testTimeoutDuration := time.Duration(timeoutTest) * time.Second * 10 // nolint:gomnd
+	testTimeoutDuration := time.Duration(timeoutTest) * time.Second
 
 	ctx, done := context.WithTimeout(context.Background(), testTimeoutDuration)
 	defer done()
 
-	doneChan := make(chan bool, 20000) // nolint:gomnd
+	doneChan := make(chan bool, 2000) // nolint:gomnd
 
 	client := createKafkaClient(t)
 
@@ -116,8 +116,6 @@ func TestMultipleSubscriptionsEventuallyProcessAllEvents(t *testing.T) {
 			require.NoError(t, err)
 		}(i)
 	}
-
-	time.Sleep(time.Second * 5) // nolint:gomnd
 
 	numberOfEvents := 200
 

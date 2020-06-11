@@ -27,7 +27,6 @@ import (
 
 	"github.com/cenkalti/backoff"
 	"github.com/segmentio/kafka-go"
-	"github.com/sirupsen/logrus"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -287,7 +286,7 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 	config := client.subscribeConfig
 	config.Topic = topic
 	config.GroupID = groupID
-	config.StartOffset = kafka.LastOffset
+	config.StartOffset = subscribeBuilder.offset
 	config.MaxWait = kafkaMaxWait
 	reader := kafka.NewReader(config)
 
@@ -307,7 +306,7 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 
 				err := client.Register(subscribeBuilder)
 				if err != nil {
-					logrus.Error(err)
+					log.Info(err)
 				}
 			}
 		}()

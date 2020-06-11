@@ -146,8 +146,6 @@ func TestKafkaPubSubSuccess(t *testing.T) {
 			}))
 	require.NoError(t, err)
 
-	time.Sleep(time.Second * 5)
-
 	err = client.Publish(
 		NewPublish().
 			Topic(topicName).
@@ -412,8 +410,6 @@ func TestKafkaPubSubMultipleTopicSuccess(t *testing.T) {
 		return
 	}
 
-	time.Sleep(time.Second * 5)
-
 	err = client.Publish(
 		NewPublish().
 			Topic(topicName1, topicName2).
@@ -587,8 +583,6 @@ func TestKafkaPubSubDifferentGroupID(t *testing.T) {
 				return nil
 			}))
 	require.NoError(t, err)
-
-	time.Sleep(time.Second * 5)
 
 	err = client.Publish(
 		NewPublish().
@@ -764,8 +758,6 @@ func TestKafkaPubSubSameGroupID(t *testing.T) {
 		return
 	}
 
-	time.Sleep(time.Second * 5)
-
 	err = client.Publish(
 		NewPublish().
 			Topic(topicName).
@@ -900,8 +892,6 @@ func TestKafkaRegisterMultipleSubscriberCallbackSuccess(t *testing.T) {
 			}))
 	require.NoError(t, err)
 
-	time.Sleep(time.Second * 5) // nolint:gomnd
-
 	err = client.Publish(
 		NewPublish().
 			Topic(topicName).
@@ -1006,8 +996,6 @@ func TestKafkaUnregisterTopicSuccess(t *testing.T) {
 
 	// unregister subscription
 	subscribeCancel()
-
-	time.Sleep(time.Second * 5) // nolint:gomnd
 
 	err = client.Publish(
 		NewPublish().

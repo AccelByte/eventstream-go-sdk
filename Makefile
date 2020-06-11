@@ -16,10 +16,10 @@ clean:
 	rm coverage.out
 
 test:
-	docker-compose up -d
+	docker-compose -f docker-compose-test.yml up -d -V
 	sleep 30
-	CGO_ENABLED=0 go test -v ./...
-	docker-compose down
+	go test -count=1 -v ./...
+	docker-compose -f docker-compose-test.yml down
 
 coverage:
 	go test -coverprofile=coverage.out ./...
