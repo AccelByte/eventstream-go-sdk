@@ -329,6 +329,7 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 					}
 
 					log.Errorf("unable to subscribe topic from kafka. error: %s", errRead)
+
 					return
 				}
 
