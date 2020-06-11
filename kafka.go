@@ -297,6 +297,7 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 			if eventProcessingFailed {
 				if subscribeBuilder.ctx.Err() != nil {
 					// the subscription is shutting down. triggered by an external context cancellation
+					log.Debug("triggered an external context cancellation. Cancelling the subscription")
 					return
 				}
 
@@ -317,7 +318,9 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 			select {
 			case <-subscribeBuilder.ctx.Done():
 				// ignore error because client isn't processing events
-				_ = subscribeBuilder.callback(subscribeBuilder.ctx, nil, subscribeBuilder.ctx.Err())
+				err = subscribeBuilder.callback(subscribeBuilder.ctx, nil, subscribeBuilder.ctx.Err())
+
+				log.Debug("triggered an external context cancellation. Cancelling the subscription")
 
 				return
 			default:
@@ -325,18 +328,23 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 				if errRead != nil {
 					if subscribeBuilder.ctx.Err() != nil {
 						// the subscription is shutting down. triggered by an external context cancellation
+						log.Debug("triggered an external context cancellation. Cancelling the subscription")
+
 						continue
 					}
 
-					log.Errorf("unable to subscribe topic from kafka. error: %s", errRead)
+					log.Errorf("unable to subscribe. Topic: %s, Err: %s", subscribeBuilder.topic, errRead)
 
 					return
 				}
 
 				err := client.processMessage(subscribeBuilder, consumerMessage)
 				if err != nil {
+					log.Debugf("cancelling the subscription as consumer can't process the event. Err %s", err.Error())
+
 					// shutdown current subscriber and mark it for restarting
 					eventProcessingFailed = true
+
 					return
 				}
 
@@ -344,6 +352,7 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 				if err != nil {
 					if subscribeBuilder.ctx.Err() == nil {
 						// the subscription is shutting down. triggered by an external context cancellation
+						log.Debug("triggered an external context cancellation. Cancelling the subscription")
 						continue
 					}
 

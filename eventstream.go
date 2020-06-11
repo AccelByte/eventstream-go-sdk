@@ -264,7 +264,7 @@ func (s *SubscribeBuilder) Topic(topic string) *SubscribeBuilder {
 	return s
 }
 
-// Topic set topic that will be subscribe
+// Offset set Offset of the event to start
 func (s *SubscribeBuilder) Offset(offset int64) *SubscribeBuilder {
 	s.offset = offset
 	return s
