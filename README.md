@@ -29,7 +29,6 @@ client, err := eventstream.NewClient(prefix, stream, brokers, config)
  * config : Custom broker configuration from client. 
  This is optional and only uses the first arguments. (variadic *BrokerConfig)   
 
-
 ## Supported Stream
 Currently event stream are supported by these stream:
 
