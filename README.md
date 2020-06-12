@@ -230,3 +230,5 @@ Event message format :
             // ...
 ```
 
+### License
+    Copyright © 2020, AccelByte Inc. Released under the Apache License, Version 2.0
