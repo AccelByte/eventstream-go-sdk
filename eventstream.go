@@ -20,6 +20,8 @@ import (
 	"context"
 	"errors"
 	"time"
+
+	"github.com/segmentio/kafka-go"
 )
 
 const (
@@ -242,7 +244,8 @@ func (p *PublishBuilder) Context(ctx context.Context) *PublishBuilder {
 type SubscribeBuilder struct {
 	topic     string
 	groupID   string
-	callback  func(ctx context.Context, event *Event, err error)
+	offset    int64
+	callback  func(ctx context.Context, event *Event, err error) error
 	eventName string
 	ctx       context.Context
 }
@@ -250,13 +253,20 @@ type SubscribeBuilder struct {
 // NewSubscribe create new SubscribeBuilder instance
 func NewSubscribe() *SubscribeBuilder {
 	return &SubscribeBuilder{
-		ctx: context.Background(),
+		ctx:    context.Background(),
+		offset: kafka.LastOffset,
 	}
 }
 
 // Topic set topic that will be subscribe
 func (s *SubscribeBuilder) Topic(topic string) *SubscribeBuilder {
 	s.topic = topic
+	return s
+}
+
+// Offset set Offset of the event to start
+func (s *SubscribeBuilder) Offset(offset int64) *SubscribeBuilder {
+	s.offset = offset
 	return s
 }
 
@@ -273,7 +283,9 @@ func (s *SubscribeBuilder) EventName(eventName string) *SubscribeBuilder {
 }
 
 // Callback to do when the event received
-func (s *SubscribeBuilder) Callback(callback func(ctx context.Context, event *Event, err error)) *SubscribeBuilder {
+func (s *SubscribeBuilder) Callback(
+	callback func(ctx context.Context, event *Event, err error) error,
+) *SubscribeBuilder {
 	s.callback = callback
 	return s
 }

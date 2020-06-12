@@ -1,4 +1,4 @@
-# Copyright 2019 AccelByte Inc
+# Copyright 2020 AccelByte Inc
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -35,8 +35,17 @@ services:
     environment:
       - KAFKA_BROKER_ID=1
       - KAFKA_ADVERTISED_PORT=9092
-      - KAFKA_ADVERTISED_HOST_NAME=localhost
+      - KAFKA_ADVERTISED_HOST_NAME=kafka
       - KAFKA_ZOOKEEPER_CONNECT=zookeeper:2181
+    networks:
+      - resource-network
+
+  ui:
+    image: obsidiandynamics/kafdrop:3.26.0
+    ports:
+      - "9000:9000"
+    environment:
+      - KAFKA_BROKERCONNECT=kafka:9092
     networks:
       - resource-network
 

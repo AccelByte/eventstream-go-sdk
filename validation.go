@@ -1,6 +1,18 @@
-// Copyright (c) 2019 AccelByte Inc. All Rights Reserved.
-// This is licensed software from AccelByte Inc, for limitations
-// and restrictions contact your company contract manager.
+/*
+ * Copyright (c) 2020 AccelByte Inc
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and limitations under the License.
+ *
+ */
 
 package eventstream
 
@@ -80,7 +92,7 @@ func validateSubscribeEvent(subscribeBuilder *SubscribeBuilder) error {
 		Topic     string `valid:"required"`
 		EventName string `valid:"alphanum,stringlength(1|256),required"`
 		GroupID   string `valid:"alphanum,stringlength(1|256),required"`
-		Callback  func(ctx context.Context, event *Event, err error)
+		Callback  func(ctx context.Context, event *Event, err error) error
 	}{
 		Topic:     subscribeBuilder.topic,
 		EventName: subscribeBuilder.eventName,

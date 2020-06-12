@@ -46,11 +46,13 @@ func main() {
 			EventName("eventName").
 			Topic("topic").
 			Context(context.Background()).
-			Callback(func(ctx context.Context, event *eventstream.Event, err error) {
+			Callback(func(ctx context.Context, event *eventstream.Event, err error) error {
 				if err != nil {
 					logrus.Error(err)
 				}
 				fmt.Printf("%+v", event)
+
+				return nil
 			}))
 
 	if err != nil {

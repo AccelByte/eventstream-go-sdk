@@ -16,9 +16,9 @@ clean:
 	rm coverage.out
 
 test:
-	docker-compose -f docker-compose-test.yml up -d
+	docker-compose -f docker-compose-test.yml up -d -V
 	sleep 30
-	CGO_ENABLED=0 go test -v ./...
+	go test -count=1 -v ./...
 	docker-compose -f docker-compose-test.yml down
 
 coverage:
@@ -26,7 +26,7 @@ coverage:
 	go tool cover -html=coverage.out
 
 run:
-	docker-compose -f docker-compose-test.yml up
+	docker-compose up
 
 lint:
 	golangci-lint run --enable-all
