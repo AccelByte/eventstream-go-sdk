@@ -1,4 +1,4 @@
-module github.com/AccelByte/eventstream-go-sdk/v2
+module github.com/AccelByte/eventstream-go-sdk/v3
 
 go 1.13
 

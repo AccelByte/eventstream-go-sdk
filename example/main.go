@@ -20,7 +20,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/AccelByte/eventstream-go-sdk/v2"
+	"github.com/AccelByte/eventstream-go-sdk/v3"
 	"github.com/sirupsen/logrus"
 )
 
