@@ -74,6 +74,7 @@ type Event struct {
 type BrokerConfig struct {
 	LogMode          string
 	StrictValidation bool
+	CACertFile       string
 	DialTimeout      time.Duration
 	ReadTimeout      time.Duration
 	WriteTimeout     time.Duration
@@ -304,7 +305,7 @@ func NewClient(prefix, stream string, brokers []string, config ...*BrokerConfig)
 	case eventStreamStdout:
 		return newStdoutClient(prefix), nil
 	case eventStreamKafka:
-		return newKafkaClient(brokers, prefix, config...), nil
+		return newKafkaClient(brokers, prefix, config...)
 	default:
 		return nil, errors.New("unsupported stream")
 	}

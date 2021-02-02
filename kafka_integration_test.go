@@ -46,6 +46,7 @@ func createKafkaClient(t *testing.T) Client {
 	t.Helper()
 
 	config := &BrokerConfig{
+		CACertFile:       "",
 		LogMode:          DebugLevel,
 		StrictValidation: true,
 	}
@@ -60,6 +61,7 @@ func createInvalidKafkaClient(t *testing.T) Client {
 	t.Helper()
 
 	config := &BrokerConfig{
+		CACertFile:       "",
 		LogMode:          DebugLevel,
 		StrictValidation: true,
 	}
