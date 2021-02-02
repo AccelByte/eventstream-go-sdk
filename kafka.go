@@ -18,6 +18,7 @@ package eventstream
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -63,7 +64,7 @@ type KafkaClient struct {
 	lock sync.RWMutex
 }
 
-func setConfig(writerConfig *kafka.WriterConfig, readerConfig *kafka.ReaderConfig, config *BrokerConfig) {
+func setConfig(writerConfig *kafka.WriterConfig, readerConfig *kafka.ReaderConfig, config *BrokerConfig) error {
 	if config.ReadTimeout != 0 {
 		writerConfig.ReadTimeout = config.WriteTimeout
 	}
@@ -73,14 +74,26 @@ func setConfig(writerConfig *kafka.WriterConfig, readerConfig *kafka.ReaderConfi
 	}
 
 	if config.DialTimeout != 0 {
-		dialer := &kafka.Dialer{
-			Timeout: config.DialTimeout,
+		writerConfig.Dialer.Timeout = config.DialTimeout
+		readerConfig.Dialer.Timeout = config.DialTimeout
+	}
+
+	if config.CACertFile != "" {
+		logrus.Debug("set TLS certificate")
+
+		cert, err := GetTLSCertFromFile(config.CACertFile)
+		if err != nil {
+			logrus.Error(err, "unable to get TLS certificate")
+			return err
 		}
-		writerConfig.Dialer = dialer
-		readerConfig.Dialer = dialer
+
+		writerConfig.Dialer.TLS.Certificates = []tls.Certificate{*cert}
+		readerConfig.Dialer.TLS.Certificates = []tls.Certificate{*cert}
 	}
 
 	setLogLevel(config.LogMode)
+
+	return nil
 }
 
 func setLogLevel(logMode string) {
@@ -99,7 +112,7 @@ func setLogLevel(logMode string) {
 }
 
 // newKafkaClient create a new instance of KafkaClient
-func newKafkaClient(brokers []string, prefix string, config ...*BrokerConfig) *KafkaClient {
+func newKafkaClient(brokers []string, prefix string, config ...*BrokerConfig) (*KafkaClient, error) {
 	logrus.Info("create new kafka client")
 
 	writerConfig := &kafka.WriterConfig{
@@ -116,8 +129,10 @@ func newKafkaClient(brokers []string, prefix string, config ...*BrokerConfig) *K
 	// only uses first KafkaConfig arguments
 	var strictValidation bool
 
+	var err error
+
 	if len(config) > 0 {
-		setConfig(writerConfig, readerConfig, config[0])
+		err = setConfig(writerConfig, readerConfig, config[0])
 		strictValidation = config[0].StrictValidation
 	}
 
@@ -127,7 +142,7 @@ func newKafkaClient(brokers []string, prefix string, config ...*BrokerConfig) *K
 		publishConfig:    *writerConfig,
 		subscribeConfig:  *readerConfig,
 		subscribers:      make(map[*SubscribeBuilder]struct{}),
-	}
+	}, err
 }
 
 // Publish send event to single or multiple topic with exponential backoff retry
