@@ -49,6 +49,9 @@ func createKafkaClient(t *testing.T) Client {
 		CACertFile:       "",
 		LogMode:          DebugLevel,
 		StrictValidation: true,
+		DialTimeout:      time.Second,
+		ReadTimeout:      time.Second,
+		WriteTimeout:     time.Second,
 	}
 
 	brokerList := []string{"localhost:9092"}
@@ -64,6 +67,9 @@ func createInvalidKafkaClient(t *testing.T) Client {
 		CACertFile:       "",
 		LogMode:          DebugLevel,
 		StrictValidation: true,
+		DialTimeout:      time.Second,
+		ReadTimeout:      time.Second,
+		WriteTimeout:     time.Second,
 	}
 
 	brokerList := []string{"invalidbroker:9092"}
