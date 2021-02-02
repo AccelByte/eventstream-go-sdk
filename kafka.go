@@ -73,9 +73,11 @@ func setConfig(writerConfig *kafka.WriterConfig, readerConfig *kafka.ReaderConfi
 		writerConfig.WriteTimeout = config.WriteTimeout
 	}
 
+	dialer := &kafka.Dialer{}
 	if config.DialTimeout != 0 {
-		writerConfig.Dialer.Timeout = config.DialTimeout
-		readerConfig.Dialer.Timeout = config.DialTimeout
+		dialer.Timeout = config.DialTimeout
+		writerConfig.Dialer = dialer
+		readerConfig.Dialer = dialer
 	}
 
 	if config.CACertFile != "" {
@@ -87,8 +89,14 @@ func setConfig(writerConfig *kafka.WriterConfig, readerConfig *kafka.ReaderConfi
 			return err
 		}
 
-		writerConfig.Dialer.TLS.Certificates = []tls.Certificate{*cert}
-		readerConfig.Dialer.TLS.Certificates = []tls.Certificate{*cert}
+		tlsConfig := &tls.Config{
+			Certificates: []tls.Certificate{*cert},
+		}
+
+		dialer.TLS = tlsConfig
+
+		writerConfig.Dialer = dialer
+		readerConfig.Dialer = dialer
 	}
 
 	setLogLevel(config.LogMode)
