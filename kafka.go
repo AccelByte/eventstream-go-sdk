@@ -211,8 +211,7 @@ func (client *KafkaClient) publishEvent(ctx context.Context, topic, eventName st
 
 	err := writer.WriteMessages(ctx, message)
 	if err != nil {
-		logrus.Errorf("unable to publish event to kafka. topic: %s , error: %v", topicName, err)
-		return fmt.Errorf("unable to publish event to kafka. topic: %s , error: %v", topicName, err)
+		return err
 	}
 
 	return nil
