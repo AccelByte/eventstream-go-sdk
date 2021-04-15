@@ -127,7 +127,7 @@ func TestMultipleSubscriptionsEventuallyProcessAllEvents(t *testing.T) {
 		}(i)
 	}
 
-	numberOfEvents := 200
+	numberOfEvents := 100
 
 	// publish few thousand of events
 	for i := 0; i < numberOfEvents; i++ {
