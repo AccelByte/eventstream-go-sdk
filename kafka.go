@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"sync"
 	"time"
@@ -60,13 +61,19 @@ type KafkaClient struct {
 	// current subscribers
 	subscribers map[*SubscribeBuilder]struct{}
 
+	// current writers
+	writers map[string]*kafka.Writer
+
 	// mutex to avoid runtime races to access subscribers map
-	lock sync.RWMutex
+	subLock sync.RWMutex
+
+	// mutex to avoid runtime races to access writers map
+	pubLock sync.RWMutex
 }
 
 func setConfig(writerConfig *kafka.WriterConfig, readerConfig *kafka.ReaderConfig, config *BrokerConfig) error {
 	if config.ReadTimeout != 0 {
-		writerConfig.ReadTimeout = config.WriteTimeout
+		writerConfig.ReadTimeout = config.ReadTimeout
 	}
 
 	if config.WriteTimeout != 0 {
@@ -150,6 +157,7 @@ func newKafkaClient(brokers []string, prefix string, config ...*BrokerConfig) (*
 		publishConfig:    *writerConfig,
 		subscribeConfig:  *readerConfig,
 		subscribers:      make(map[*SubscribeBuilder]struct{}),
+		writers:          make(map[string]*kafka.Writer),
 	}, err
 }
 
@@ -207,19 +215,27 @@ func (client *KafkaClient) Publish(publishBuilder *PublishBuilder) error {
 func (client *KafkaClient) publishEvent(ctx context.Context, topic, eventName string, config kafka.WriterConfig,
 	message kafka.Message) error {
 	topicName := constructTopic(client.prefix, topic)
-	logrus.Debugf("publish event %s into topic %s", eventName,
-		topicName)
+	logrus.Debugf("publish event %s into topic %s", eventName, topicName)
 
 	config.Topic = topicName
-	writer := kafka.NewWriter(config)
-
-	defer func() {
-		_ = writer.Close()
-	}()
-
+	writer := client.getWriter(config)
 	err := writer.WriteMessages(ctx, message)
+
 	if err != nil {
-		return err
+		if errors.Is(err, io.ErrClosedPipe) {
+			// new a writer and retry
+			writer = client.newWriter(config)
+			err = writer.WriteMessages(ctx, message)
+		}
+
+		if err != nil {
+			// delete writer if it fails to publish the event
+			client.deleteWriter(config.Topic)
+
+			logrus.Errorf("unable to publish event to kafka. topic: %s , error: %v", topicName, err)
+
+			return fmt.Errorf("unable to publish event to kafka. topic: %s , error: %v", topicName, err)
+		}
 	}
 
 	return nil
@@ -265,8 +281,8 @@ func ConstructEvent(publishBuilder *PublishBuilder) (kafka.Message, *Event, erro
 
 // unregister unregister subscriber
 func (client *KafkaClient) unregister(subscribeBuilder *SubscribeBuilder) {
-	client.lock.Lock()
-	defer client.lock.Unlock()
+	client.subLock.Lock()
+	defer client.subLock.Unlock()
 
 	delete(client.subscribers, subscribeBuilder)
 }
@@ -392,8 +408,8 @@ func (client *KafkaClient) registerSubscriber(subscribeBuilder *SubscribeBuilder
 	isRegistered bool,
 	err error,
 ) {
-	client.lock.Lock()
-	defer client.lock.Unlock()
+	client.subLock.Lock()
+	defer client.subLock.Unlock()
 
 	for subs := range client.subscribers {
 		if subs.topic == subscribeBuilder.topic && subs.eventName == subscribeBuilder.eventName {
@@ -406,6 +422,44 @@ func (client *KafkaClient) registerSubscriber(subscribeBuilder *SubscribeBuilder
 	client.subscribers[subscribeBuilder] = struct{}{}
 
 	return false, nil
+}
+
+// getWriter get a writer based on config
+func (client *KafkaClient) getWriter(config kafka.WriterConfig) *kafka.Writer {
+	if writer, ok := client.writers[config.Topic]; ok {
+		return writer
+	}
+
+	client.pubLock.Lock()
+	defer client.pubLock.Unlock()
+
+	if _, ok := client.writers[config.Topic]; !ok {
+		writer := kafka.NewWriter(config)
+		client.writers[config.Topic] = writer
+	}
+
+	return client.writers[config.Topic]
+}
+
+// newWriter new a writer
+func (client *KafkaClient) newWriter(config kafka.WriterConfig) *kafka.Writer {
+	client.pubLock.Lock()
+	defer client.pubLock.Unlock()
+
+	// let's always new a writer
+	writer := kafka.NewWriter(config)
+	client.writers[config.Topic] = writer
+
+	return writer
+}
+
+// deleteWriter delete writer
+func (client *KafkaClient) deleteWriter(topic string) {
+	client.pubLock.Lock()
+	defer client.pubLock.Unlock()
+
+	// we only delete the writer from the slice but no close, should close in some interval?
+	delete(client.writers, topic)
 }
 
 // processMessage process a message from kafka

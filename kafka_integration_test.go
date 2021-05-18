@@ -85,6 +85,7 @@ func constructTopicTest() string {
 
 // nolint dupl
 func TestKafkaPubSubSuccess(t *testing.T) {
+	t.Parallel()
 	ctx, done := context.WithTimeout(context.Background(), time.Duration(timeoutTest)*time.Second)
 	defer done()
 
@@ -202,6 +203,7 @@ func TestKafkaPubSubSuccess(t *testing.T) {
 
 // nolint dupl
 func TestKafkaPubFailed(t *testing.T) {
+	t.Parallel()
 	ctx, done := context.WithTimeout(context.Background(), time.Duration(timeoutTest)*time.Second)
 	defer done()
 
@@ -297,6 +299,7 @@ func TestKafkaPubFailed(t *testing.T) {
 
 // nolint dupl
 func TestKafkaPubSubMultipleTopicSuccess(t *testing.T) {
+	t.Parallel()
 	ctx, done := context.WithTimeout(context.Background(), time.Duration(timeoutTest)*time.Second)
 	defer done()
 
@@ -473,6 +476,7 @@ func TestKafkaPubSubMultipleTopicSuccess(t *testing.T) {
 
 // nolint dupl
 func TestKafkaPubSubDifferentGroupID(t *testing.T) {
+	t.Parallel()
 	ctx, done := context.WithTimeout(context.Background(), time.Duration(timeoutTest)*time.Second)
 	defer done()
 
@@ -645,6 +649,7 @@ func TestKafkaPubSubDifferentGroupID(t *testing.T) {
 
 // nolint dupl
 func TestKafkaPubSubSameGroupID(t *testing.T) {
+	t.Parallel()
 	ctx, done := context.WithTimeout(context.Background(), time.Duration(timeoutTest)*time.Second)
 	defer done()
 
@@ -830,6 +835,8 @@ L:
 
 // nolint:funlen
 func TestKafkaRegisterMultipleSubscriberCallbackSuccess(t *testing.T) {
+	t.Parallel()
+
 	ctx, done := context.WithTimeout(context.Background(), time.Duration(timeoutTest)*time.Second)
 	defer done()
 
@@ -947,6 +954,8 @@ func TestKafkaRegisterMultipleSubscriberCallbackSuccess(t *testing.T) {
 
 //nolint:funlen
 func TestKafkaUnregisterTopicSuccess(t *testing.T) {
+	t.Parallel()
+
 	ctx, done := context.WithTimeout(context.Background(), time.Duration(timeoutTest)*time.Second)
 	defer done()
 
