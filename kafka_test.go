@@ -25,6 +25,7 @@ import (
 
 // nolint dupl
 func TestKafkaPubWithNilEvent(t *testing.T) {
+	t.Parallel()
 	client := createKafkaClient(t)
 
 	err := client.Publish(nil)
@@ -33,6 +34,7 @@ func TestKafkaPubWithNilEvent(t *testing.T) {
 
 // nolint dupl
 func TestKafkaSubWithNilEvent(t *testing.T) {
+	t.Parallel()
 	client := createKafkaClient(t)
 
 	err := client.Register(nil)
@@ -41,6 +43,7 @@ func TestKafkaSubWithNilEvent(t *testing.T) {
 
 // nolint dupl
 func TestKafkaPubWithEmptyTopic(t *testing.T) {
+	t.Parallel()
 	client := createKafkaClient(t)
 
 	var mockPayload = make(map[string]interface{})
@@ -97,6 +100,7 @@ func TestKafkaPubWithEmptyTopic(t *testing.T) {
 
 // nolint dupl
 func TestKafkaPubInvalidEventStruct(t *testing.T) {
+	t.Parallel()
 	client := createKafkaClient(t)
 	topicName := constructTopicTest()
 
@@ -150,6 +154,7 @@ func TestKafkaPubInvalidEventStruct(t *testing.T) {
 
 // nolint dupl
 func TestKafkaPubInvalidUserID(t *testing.T) {
+	t.Parallel()
 	client := createKafkaClient(t)
 	topicName := constructTopicTest()
 
@@ -208,6 +213,7 @@ func TestKafkaPubInvalidUserID(t *testing.T) {
 
 // nolint dupl
 func TestKafkaPubInvalidClientID(t *testing.T) {
+	t.Parallel()
 	client := createKafkaClient(t)
 	topicName := constructTopicTest()
 
@@ -266,6 +272,7 @@ func TestKafkaPubInvalidClientID(t *testing.T) {
 
 // nolint dupl
 func TestKafkaSubWithEmptyTopic(t *testing.T) {
+	t.Parallel()
 	client := createKafkaClient(t)
 
 	mockEvent := &Event{
@@ -284,6 +291,7 @@ func TestKafkaSubWithEmptyTopic(t *testing.T) {
 
 // nolint dupl
 func TestKafkaSubInvalidEventStruct(t *testing.T) {
+	t.Parallel()
 	client := createKafkaClient(t)
 	topicName := constructTopicTest()
 
@@ -304,6 +312,7 @@ func TestKafkaSubInvalidEventStruct(t *testing.T) {
 
 // nolint dupl
 func TestKafkaSubNilCallback(t *testing.T) {
+	t.Parallel()
 	client := createKafkaClient(t)
 	topicName := constructTopicTest()
 

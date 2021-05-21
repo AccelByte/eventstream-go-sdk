@@ -48,7 +48,7 @@ func TestMultipleSubscriptionsEventuallyProcessAllEvents(t *testing.T) {
 		"summary": "user:_failed",
 	}
 
-	eventName := "testEventTestMultipleSubscriptions"
+	eventName := "TestMultipleSubscriptionsEventuallyProcessAllEvents"
 
 	mockEvent := Event{
 		EventName:        eventName,
@@ -127,35 +127,41 @@ func TestMultipleSubscriptionsEventuallyProcessAllEvents(t *testing.T) {
 		}(i)
 	}
 
-	numberOfEvents := 100
+	numberOfProducer := 2
+	numberOfEventsPerProducer := 100
+	numberOfEvents := numberOfProducer * numberOfEventsPerProducer
 
 	// publish few thousand of events
-	for i := 0; i < numberOfEvents; i++ {
-		eventToSend := mockEvent
-		eventToSend.EventID = i
+	for i := 0; i < numberOfProducer; i++ {
+		go func(producer int) {
+			for j := 0; j < numberOfEventsPerProducer; j++ {
+				eventToSend := mockEvent
+				eventToSend.EventID = producer*numberOfEventsPerProducer + j
 
-		err := client.Publish(
-			NewPublish().
-				Topic(topicName).
-				EventName(eventToSend.EventName).
-				Namespace(eventToSend.Namespace).
-				ClientID(eventToSend.ClientID).
-				UserID(eventToSend.UserID).
-				SessionID(eventToSend.SessionID).
-				TraceID(eventToSend.TraceID).
-				SpanContext(eventToSend.SpanContext).
-				EventID(eventToSend.EventID).
-				EventType(eventToSend.EventType).
-				EventLevel(eventToSend.EventLevel).
-				ServiceName(eventToSend.ServiceName).
-				ClientIDs(eventToSend.ClientIDs).
-				TargetUserIDs(eventToSend.TargetUserIDs).
-				TargetNamespace(eventToSend.TargetNamespace).
-				Privacy(eventToSend.Privacy).
-				AdditionalFields(eventToSend.AdditionalFields).
-				Context(context.Background()).
-				Payload(mockPayload))
-		require.NoError(t, err)
+				err := client.Publish(
+					NewPublish().
+						Topic(topicName).
+						EventName(eventToSend.EventName).
+						Namespace(eventToSend.Namespace).
+						ClientID(eventToSend.ClientID).
+						UserID(eventToSend.UserID).
+						SessionID(eventToSend.SessionID).
+						TraceID(eventToSend.TraceID).
+						SpanContext(eventToSend.SpanContext).
+						EventID(eventToSend.EventID).
+						EventType(eventToSend.EventType).
+						EventLevel(eventToSend.EventLevel).
+						ServiceName(eventToSend.ServiceName).
+						ClientIDs(eventToSend.ClientIDs).
+						TargetUserIDs(eventToSend.TargetUserIDs).
+						TargetNamespace(eventToSend.TargetNamespace).
+						Privacy(eventToSend.Privacy).
+						AdditionalFields(eventToSend.AdditionalFields).
+						Context(context.Background()).
+						Payload(mockPayload))
+				require.NoError(t, err)
+			}
+		}(i)
 	}
 
 	for {
