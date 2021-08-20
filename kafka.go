@@ -213,13 +213,35 @@ func (client *KafkaClient) Publish(publishBuilder *PublishBuilder) error {
 
 // Publish send event to a topic
 func (client *KafkaClient) publishEvent(ctx context.Context, topic, eventName string, config kafka.WriterConfig,
-	message kafka.Message) error {
+	message kafka.Message) (err error) {
+	writer := &kafka.Writer{}
+
+	defer func() {
+		if r := recover(); r != nil {
+			logrus.Warnf("unable to publish event to: %s. attempt to recover", topic)
+
+			if writer == nil {
+				err = errors.New("writer is nil")
+
+				return
+			}
+
+			if err = writer.Close(); err != nil {
+				logrus.Errorf("unable to publish event to: %s, unable to close writer: %s", topic, err.Error())
+			}
+
+			client.deleteWriter(config.Topic)
+
+			err = fmt.Errorf("recover: %v", r)
+		}
+	}()
+
 	topicName := constructTopic(client.prefix, topic)
 	logrus.Debugf("publish event %s into topic %s", eventName, topicName)
 
 	config.Topic = topicName
-	writer := client.getWriter(config)
-	err := writer.WriteMessages(ctx, message)
+	writer = client.getWriter(config)
+	err = writer.WriteMessages(ctx, message)
 
 	if err != nil {
 		if errors.Is(err, io.ErrClosedPipe) {
@@ -238,7 +260,7 @@ func (client *KafkaClient) publishEvent(ctx context.Context, topic, eventName st
 		}
 	}
 
-	return nil
+	return err
 }
 
 // ConstructEvent construct event message
