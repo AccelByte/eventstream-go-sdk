@@ -78,6 +78,7 @@ type BrokerConfig struct {
 	DialTimeout      time.Duration
 	ReadTimeout      time.Duration
 	WriteTimeout     time.Duration
+	Balancer         kafka.Balancer
 }
 
 // PublishBuilder defines the structure of message which is sent through message broker

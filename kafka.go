@@ -131,8 +131,7 @@ func newKafkaClient(brokers []string, prefix string, config ...*BrokerConfig) (*
 	logrus.Info("create new kafka client")
 
 	writerConfig := &kafka.WriterConfig{
-		Brokers:  brokers,
-		Balancer: &kafka.LeastBytes{},
+		Brokers: brokers,
 	}
 
 	readerConfig := &kafka.ReaderConfig{
@@ -149,6 +148,7 @@ func newKafkaClient(brokers []string, prefix string, config ...*BrokerConfig) (*
 	if len(config) > 0 {
 		err = setConfig(writerConfig, readerConfig, config[0])
 		strictValidation = config[0].StrictValidation
+		writerConfig.Balancer = config[0].Balancer
 	}
 
 	return &KafkaClient{
