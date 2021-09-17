@@ -36,6 +36,7 @@ const (
 	errorTimeout   = "timeout while executing test"
 	errorPublish   = "error when publish event"
 	errorSubscribe = "error when subscribe event"
+	preCreateTopic = "testTopic"
 )
 
 type Payload struct {
