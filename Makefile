@@ -17,7 +17,7 @@ clean:
 
 test:
 	docker-compose -f docker-compose-test.yml up -d -V
-	sleep 50
+	sleep 30
 	go test -v ./...
 	docker-compose -f docker-compose-test.yml down
 

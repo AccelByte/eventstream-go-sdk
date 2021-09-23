@@ -39,7 +39,7 @@ func TestMultipleSubscriptionsEventuallyProcessAllEvents(t *testing.T) {
 
 	client := createKafkaClient(t)
 
-	topicName := constructTopicTest()
+	topicName := preCreateTopic
 
 	var mockPayload = make(map[string]interface{})
 	mockPayload[testPayload] = "testPayload" // nolint:goconst
