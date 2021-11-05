@@ -170,31 +170,42 @@ func (client *KafkaClient) Publish(publishBuilder *PublishBuilder) error {
 
 	err := validatePublishEvent(publishBuilder, client.strictValidation)
 	if err != nil {
-		logrus.Error(err)
+		logrus.
+			WithField("Topic Name", publishBuilder.topic).
+			WithField("Event Name", publishBuilder.eventName).
+			Error("incorrect publisher event: ", err)
 		return err
 	}
 
 	message, event, err := ConstructEvent(publishBuilder)
 	if err != nil {
-		logrus.Errorf("unable to construct event: %s , error: %v", publishBuilder.eventName, err)
+		logrus.
+			WithField("Topic Name", publishBuilder.topic).
+			WithField("Event Name", publishBuilder.eventName).
+			Error("unable to construct event: ", err)
 		return fmt.Errorf("unable to construct event : %s , error : %v", publishBuilder.eventName, err)
 	}
 
 	config := client.publishConfig
 
 	for _, pubTopic := range publishBuilder.topic {
-		topic := pubTopic
+		topic := constructTopic(client.prefix, pubTopic)
 
 		go func() {
 			err = backoff.RetryNotify(func() error {
 				return client.publishEvent(publishBuilder.ctx, topic, publishBuilder.eventName, config, message)
 			}, backoff.WithMaxRetries(backoff.NewExponentialBackOff(), maxBackOffCount),
 				func(err error, _ time.Duration) {
-					logrus.Debugf("retrying publish event: error %v: ", err)
+					logrus.
+						WithField("Topic Name", topic).
+						WithField("Event Name", publishBuilder.eventName).
+						Warn("retrying publish event: ", err)
 				})
 			if err != nil {
-				logrus.Errorf("unable to publish event. topic: %s , event: %s , error: %v", topic,
-					publishBuilder.eventName, err)
+				logrus.
+					WithField("Topic Name", topic).
+					WithField("Event Name", publishBuilder.eventName).
+					Error("giving up publishing event: ", err)
 
 				if publishBuilder.errorCallback != nil {
 					publishBuilder.errorCallback(event, err)
@@ -203,8 +214,10 @@ func (client *KafkaClient) Publish(publishBuilder *PublishBuilder) error {
 				return
 			}
 
-			logrus.Debugf("successfully publish event %s into topic %s", publishBuilder.eventName,
-				topic)
+			logrus.
+				WithField("Topic Name", topic).
+				WithField("Event Name", publishBuilder.eventName).
+				Debug("successfully publish event")
 		}()
 	}
 
@@ -216,18 +229,27 @@ func (client *KafkaClient) publishEvent(ctx context.Context, topic, eventName st
 	message kafka.Message) (err error) {
 	writer := &kafka.Writer{}
 
+	logrus.
+		WithField("Topic Name", topic).
+		WithField("Event Name", eventName).
+		Debug("publish event")
+
 	defer func() {
 		if r := recover(); r != nil {
-			logrus.Warnf("unable to publish event to: %s. attempt to recover. error: %v", topic, r)
+			logrus.
+				WithField("Topic Name", topic).
+				WithField("Event Name", eventName).
+				Warn("unable to publish event: recover: ", r)
 
 			if writer == nil {
+				logrus.
+					WithField("Topic Name", topic).
+					WithField("Event Name", eventName).
+					Warn("unable to publish event: writer is nil")
+
 				err = errors.New("writer is nil")
 
 				return
-			}
-
-			if err = writer.Close(); err != nil {
-				logrus.Errorf("unable to publish event to: %s, unable to close writer: %s", topic, err.Error())
 			}
 
 			client.deleteWriter(config.Topic)
@@ -236,10 +258,36 @@ func (client *KafkaClient) publishEvent(ctx context.Context, topic, eventName st
 		}
 	}()
 
-	topicName := constructTopic(client.prefix, topic)
-	logrus.Debugf("publish event %s into topic %s", eventName, topicName)
+	/*
+		Calling Dial Leader is a temporary workaround for auto-create topic issue here https://github.com/segmentio/kafka-go/issues/683
+		that occurs in Segmention v0.4.0 or newer
 
-	config.Topic = topicName
+		It will try creating topic in partition between 0 - 5 since we don't know the partition ID in the Kafka Server
+	*/
+	i := 0
+	for {
+		conn, err := kafka.DialLeader(context.Background(), "tcp", client.publishConfig.Brokers[0], topic, i)
+		if err == nil {
+			err := conn.Close()
+			if err != nil {
+				logrus.
+					WithField("Topic Name", topic).
+					WithField("Event Name", eventName).
+					Error("unable to close dial leader partition: ", err)
+			}
+			break
+		}
+		if i == 5 {
+			logrus.
+				WithField("Topic Name", topic).
+				WithField("Event Name", eventName).
+				Error("giving up dialing leader partition")
+			break
+		}
+		i++
+	}
+
+	config.Topic = topic
 	writer = client.getWriter(config)
 	err = writer.WriteMessages(ctx, message)
 
@@ -254,13 +302,11 @@ func (client *KafkaClient) publishEvent(ctx context.Context, topic, eventName st
 			// delete writer if it fails to publish the event
 			client.deleteWriter(config.Topic)
 
-			logrus.Errorf("unable to publish event to kafka. topic: %s , error: %v", topicName, err)
-
-			return fmt.Errorf("unable to publish event to kafka. topic: %s , error: %v", topicName, err)
+			return err
 		}
 	}
 
-	return err
+	return nil
 }
 
 // ConstructEvent construct event message
@@ -291,7 +337,6 @@ func ConstructEvent(publishBuilder *PublishBuilder) (kafka.Message, *Event, erro
 
 	eventBytes, err := marshal(event)
 	if err != nil {
-		logrus.Errorf("unable to marshal event: %s , error: %v", publishBuilder.eventName, err)
 		return kafka.Message{}, event, err
 	}
 
@@ -317,12 +362,18 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 		return errSubNilEvent
 	}
 
-	logrus.Debugf("register callback to consume topic %s , event: %s", subscribeBuilder.topic,
-		subscribeBuilder.eventName)
+	logrus.
+		WithField("Topic Name", subscribeBuilder.topic).
+		WithField("Event Name", subscribeBuilder.eventName).
+		Debug("register callback")
 
 	err := validateSubscribeEvent(subscribeBuilder)
 	if err != nil {
-		logrus.Error(err)
+		logrus.
+			WithField("Topic Name", subscribeBuilder.topic).
+			WithField("Event Name", subscribeBuilder.eventName).
+			Error("incorrect subscriber event: ", err)
+
 		return err
 	}
 
@@ -331,14 +382,18 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 
 	isRegistered, err := client.registerSubscriber(subscribeBuilder)
 	if err != nil {
-		logrus.Errorf("unable to register callback. error: %v", err)
+		logrus.
+			WithField("Topic Name", topic).
+			WithField("Event Name", subscribeBuilder.eventName).
+			Error("unable to register callback: ", err)
+
 		return err
 	}
 
 	if isRegistered {
 		return fmt.Errorf(
 			"topic and event already registered. topic: %s , event: %s",
-			subscribeBuilder.topic,
+			topic,
 			subscribeBuilder.eventName,
 		)
 	}
@@ -357,7 +412,10 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 			if eventProcessingFailed {
 				if subscribeBuilder.ctx.Err() != nil {
 					// the subscription is shutting down. triggered by an external context cancellation
-					logrus.Debug("triggered an external context cancellation. Cancelling the subscription")
+					logrus.
+						WithField("Topic Name", topic).
+						WithField("Event Name", subscribeBuilder.eventName).
+						Debug("triggered an external context cancellation. Cancelling the subscription")
 					return
 				}
 
@@ -380,7 +438,10 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 				// ignore error because client isn't processing events
 				err = subscribeBuilder.callback(subscribeBuilder.ctx, nil, subscribeBuilder.ctx.Err())
 
-				logrus.Debug("triggered an external context cancellation. Cancelling the subscription")
+				logrus.
+					WithField("Topic Name", topic).
+					WithField("Event Name", subscribeBuilder.eventName).
+					Debug("triggered an external context cancellation. Cancelling the subscription")
 
 				return
 			default:
@@ -388,19 +449,28 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 				if errRead != nil {
 					if subscribeBuilder.ctx.Err() != nil {
 						// the subscription is shutting down. triggered by an external context cancellation
-						logrus.Debug("triggered an external context cancellation. Cancelling the subscription")
+						logrus.
+							WithField("Topic Name", topic).
+							WithField("Event Name", subscribeBuilder.eventName).
+							Debug("triggered an external context cancellation. Cancelling the subscription")
 
 						continue
 					}
 
-					logrus.Errorf("unable to subscribe. Topic: %s, Err: %s", subscribeBuilder.topic, errRead)
+					logrus.
+						WithField("Topic Name", topic).
+						WithField("Event Name", subscribeBuilder.eventName).
+						Error("unable to subscribe", errRead)
 
 					return
 				}
 
-				err := client.processMessage(subscribeBuilder, consumerMessage)
+				err := client.processMessage(subscribeBuilder, consumerMessage, topic)
 				if err != nil {
-					logrus.Debugf("cancelling the subscription as consumer can't process the event. Err %s", err.Error())
+					logrus.
+						WithField("Topic Name", topic).
+						WithField("Event Name", subscribeBuilder.eventName).
+						Error("unable to process the event: ", err)
 
 					// shutdown current subscriber and mark it for restarting
 					eventProcessingFailed = true
@@ -412,11 +482,17 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 				if err != nil {
 					if subscribeBuilder.ctx.Err() == nil {
 						// the subscription is shutting down. triggered by an external context cancellation
-						logrus.Debug("triggered an external context cancellation. Cancelling the subscription")
+						logrus.
+							WithField("Topic Name", topic).
+							WithField("Event Name", subscribeBuilder.eventName).
+							Debug("triggered an external context cancellation. Cancelling the subscription")
 						continue
 					}
 
-					logrus.Error("unable to commit the event. error: ", err)
+					logrus.
+						WithField("Topic Name", topic).
+						WithField("Event Name", subscribeBuilder.eventName).
+						Error("unable to commit the event: ", err)
 				}
 			}
 		}
@@ -480,17 +556,23 @@ func (client *KafkaClient) deleteWriter(topic string) {
 	client.pubLock.Lock()
 	defer client.pubLock.Unlock()
 
+	writer, ok := client.writers[topic]
+	if ok {
+		_ = writer.Close()
+	}
+
 	// we only delete the writer from the slice but no close, should close in some interval?
 	delete(client.writers, topic)
 }
 
 // processMessage process a message from kafka
-func (client *KafkaClient) processMessage(subscribeBuilder *SubscribeBuilder, message kafka.Message) error {
-	logrus.Debugf("process message from topic: %s, groupID : %s", message.Topic, subscribeBuilder.groupID)
-
+func (client *KafkaClient) processMessage(subscribeBuilder *SubscribeBuilder, message kafka.Message, topic string) error {
 	event, err := unmarshal(message)
 	if err != nil {
-		logrus.Error("unable to unmarshal message from subscribe in kafka. error: ", err)
+		logrus.
+			WithField("Topic Name", topic).
+			WithField("Event Name", subscribeBuilder.eventName).
+			Error("unable to unmarshal message from subscribe in kafka: ", err)
 
 		// as retry will fail infinitely - return nil to ACK the event
 		return nil
@@ -502,7 +584,7 @@ func (client *KafkaClient) processMessage(subscribeBuilder *SubscribeBuilder, me
 		return nil
 	}
 
-	return client.runCallback(subscribeBuilder, event, message)
+	return client.runCallback(subscribeBuilder, event)
 }
 
 // unmarshal unmarshal received message into event struct
@@ -521,11 +603,7 @@ func unmarshal(message kafka.Message) (*Event, error) {
 func (client *KafkaClient) runCallback(
 	subscribeBuilder *SubscribeBuilder,
 	event *Event,
-	consumerMessage kafka.Message,
 ) error {
-	logrus.Debugf("run callback for topic: %s , event name: %s, groupID: %s", consumerMessage.Topic,
-		event.EventName, subscribeBuilder.groupID)
-
 	return subscribeBuilder.callback(subscribeBuilder.ctx, &Event{
 		ID:               event.ID,
 		ClientID:         event.ClientID,
