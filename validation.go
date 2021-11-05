@@ -56,7 +56,7 @@ func validatePublishEvent(publishBuilder *PublishBuilder, strictValidation bool)
 
 	valid, err := validator.ValidateStruct(publishEvent)
 	if err != nil {
-		logrus.Errorf("unable to validate publish event. error : %v", err)
+		logrus.WithField("topic", publishEvent.Topic).Errorf("unable to validate publish event. error : %v", err)
 		return errInvalidPubStruct
 	}
 
