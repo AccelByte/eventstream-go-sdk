@@ -236,6 +236,25 @@ func (client *KafkaClient) publishEvent(ctx context.Context, topic, eventName st
 		}
 	}()
 
+	i := 0
+	for {
+		conn, err := kafka.DialLeader(context.Background(), "tcp", client.publishConfig.Brokers[0], topic, i)
+		if err != nil {
+			logrus.Error("unable to dial leader partition to create a topic: ", err)
+		} else {
+			err := conn.Close()
+			if err != nil {
+				logrus.Error("unable to close dial leader: ", err)
+			}
+			break
+		}
+		if i == 10 {
+			logrus.Error("unable to dial leader partition: ")
+			break
+		}
+		i++
+	}
+
 	topicName := constructTopic(client.prefix, topic)
 	logrus.Debugf("publish event %s into topic %s", eventName, topicName)
 
