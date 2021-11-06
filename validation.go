@@ -39,7 +39,7 @@ func validatePublishEvent(publishBuilder *PublishBuilder, strictValidation bool)
 	publishEvent := struct {
 		Topic     []string `valid:"required"`
 		EventName string   `valid:"alphanum,stringlength(1|256),required"`
-		Namespace string   `valid:"alphanum,stringlength(1|256),required"`
+		Namespace string
 		ClientID  string
 		UserID    string
 		SessionID string
