@@ -258,35 +258,6 @@ func (client *KafkaClient) publishEvent(ctx context.Context, topic, eventName st
 		}
 	}()
 
-	/*
-		Calling Dial Leader is a temporary workaround for auto-create topic issue here https://github.com/segmentio/kafka-go/issues/683
-		that occurs in Segmention v0.4.0 or newer
-
-		It will try creating topic in partition between 0 - 5 since we don't know the partition ID in the Kafka Server
-	*/
-	i := 0
-	for {
-		conn, err := kafka.DialLeader(context.Background(), "tcp", client.publishConfig.Brokers[0], topic, i)
-		if err == nil {
-			err := conn.Close()
-			if err != nil {
-				logrus.
-					WithField("Topic Name", topic).
-					WithField("Event Name", eventName).
-					Error("unable to close dial leader partition: ", err)
-			}
-			break
-		}
-		if i == 5 {
-			logrus.
-				WithField("Topic Name", topic).
-				WithField("Event Name", eventName).
-				Error("giving up dialing leader partition")
-			break
-		}
-		i++
-	}
-
 	config.Topic = topic
 	writer = client.getWriter(config)
 	err = writer.WriteMessages(ctx, message)
