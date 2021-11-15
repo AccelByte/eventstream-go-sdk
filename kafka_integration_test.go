@@ -33,6 +33,7 @@ const (
 	timeoutTest    = 60
 	prefix         = "prefix"
 	testPayload    = "testPayload"
+	testKey        = "testKey"
 	errorTimeout   = "timeout while executing test"
 	errorPublish   = "error when publish event"
 	errorSubscribe = "error when subscribe event"
@@ -120,6 +121,7 @@ func TestKafkaPubSubSuccess(t *testing.T) {
 		Privacy:          true,
 		AdditionalFields: mockAdditionalFields,
 		Version:          defaultVersion,
+		Key:              testKey,
 		Payload:          mockPayload,
 	}
 
@@ -159,6 +161,7 @@ func TestKafkaPubSubSuccess(t *testing.T) {
 				assert.Equal(t, mockEvent.Privacy, event.Privacy, "Privacy should be equal")
 				assert.Equal(t, mockEvent.AdditionalFields, event.AdditionalFields, "AdditionalFields should be equal")
 				assert.Equal(t, mockEvent.Version, event.Version, "version should be equal")
+				assert.Equal(t, mockEvent.Key, event.Key, "key should be equal")
 				if validPayload := reflect.DeepEqual(mockEvent.Payload[testPayload].(Payload), eventPayload); !validPayload {
 					assert.Fail(t, "payload should be equal")
 				}
@@ -188,6 +191,7 @@ func TestKafkaPubSubSuccess(t *testing.T) {
 			TargetNamespace(mockEvent.TargetNamespace).
 			Privacy(mockEvent.Privacy).
 			AdditionalFields(mockEvent.AdditionalFields).
+			Key(testKey).
 			Payload(mockPayload))
 	if err != nil {
 		assert.FailNow(t, errorPublish, err)
