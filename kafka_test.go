@@ -149,7 +149,7 @@ func TestKafkaPubInvalidEventStruct(t *testing.T) {
 			Context(context.Background()).
 			Payload(mockPayload))
 
-	assert.Equal(t, errInvalidPubStruct, err, "error should be equal")
+	assert.Error(t, err, "error should be equal")
 }
 
 // nolint dupl
@@ -286,7 +286,7 @@ func TestKafkaSubWithEmptyTopic(t *testing.T) {
 				return nil
 			}))
 
-	assert.Equal(t, errInvalidSubStruct, err, "error should be equal")
+	assert.Error(t, err, "error should be not nil")
 }
 
 // nolint dupl
@@ -307,7 +307,7 @@ func TestKafkaSubInvalidEventStruct(t *testing.T) {
 				return nil
 			}))
 
-	assert.Equal(t, errInvalidSubStruct, err, "error should be equal")
+	assert.Error(t, err, "error should be not nil")
 }
 
 // nolint dupl

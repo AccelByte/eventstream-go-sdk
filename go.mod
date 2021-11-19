@@ -7,6 +7,7 @@ require (
 	github.com/cenkalti/backoff v2.2.1+incompatible
 	github.com/google/uuid v1.1.1
 	github.com/mitchellh/mapstructure v1.1.2
+	github.com/pkg/errors v0.9.1
 	github.com/segmentio/kafka-go v0.4.23
 	github.com/sirupsen/logrus v1.4.1
 	github.com/stretchr/testify v1.6.1
