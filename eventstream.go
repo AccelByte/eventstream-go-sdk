@@ -33,7 +33,6 @@ const (
 const (
 	separator      = "."
 	defaultVersion = 1
-	defaultGroupID = "*"
 )
 
 // log level
@@ -68,6 +67,10 @@ type Event struct {
 	Topic            string                 `json:"topic"`
 	AdditionalFields map[string]interface{} `json:"additional_fields,omitempty"`
 	Payload          map[string]interface{} `json:"payload"`
+
+	Partition int    `json:",omitempty"`
+	Offset    int64  `json:",omitempty"`
+	Key       string `json:",omitempty"`
 }
 
 // BrokerConfig is custom configuration for message broker
@@ -101,6 +104,7 @@ type PublishBuilder struct {
 	targetNamespace  string
 	privacy          bool
 	additionalFields map[string]interface{}
+	key              string
 	payload          map[string]interface{}
 	errorCallback    func(event *Event, err error)
 	ctx              context.Context
@@ -220,6 +224,13 @@ func (p *PublishBuilder) Privacy(privacy bool) *PublishBuilder {
 // AdditionalFields set AdditionalFields of publisher event
 func (p *PublishBuilder) AdditionalFields(additionalFields map[string]interface{}) *PublishBuilder {
 	p.additionalFields = additionalFields
+	return p
+}
+
+// Key is a message key that used to determine the partition of the topic
+// if client require strong order for the events
+func (p *PublishBuilder) Key(key string) *PublishBuilder {
+	p.key = key
 	return p
 }
 

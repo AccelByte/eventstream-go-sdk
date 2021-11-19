@@ -283,6 +283,10 @@ func (client *KafkaClient) publishEvent(ctx context.Context, topic, eventName st
 // ConstructEvent construct event message
 func ConstructEvent(publishBuilder *PublishBuilder) (kafka.Message, *Event, error) {
 	id := generateID()
+	key := publishBuilder.key
+	if publishBuilder.key == "" {
+		key = id
+	}
 	event := &Event{
 		ID:               id,
 		EventName:        publishBuilder.eventName,
@@ -312,7 +316,7 @@ func ConstructEvent(publishBuilder *PublishBuilder) (kafka.Message, *Event, erro
 	}
 
 	return kafka.Message{
-		Key:   []byte(id),
+		Key:   []byte(key),
 		Value: eventBytes,
 	}, event, nil
 }
@@ -369,14 +373,14 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 		)
 	}
 
-	config := client.subscribeConfig
-	config.Topic = topic
-	config.GroupID = groupID
-	config.StartOffset = subscribeBuilder.offset
-	config.MaxWait = kafkaMaxWait
-	reader := kafka.NewReader(config)
-
 	go func() {
+		config := client.subscribeConfig
+		config.Topic = topic
+		config.GroupID = groupID
+		config.StartOffset = subscribeBuilder.offset
+		config.MaxWait = kafkaMaxWait
+		reader := kafka.NewReader(config)
+
 		var eventProcessingFailed bool
 
 		defer func() {
@@ -425,6 +429,7 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 							WithField("Event Name", subscribeBuilder.eventName).
 							Debug("triggered an external context cancellation. Cancelling the subscription")
 
+						reader = kafka.NewReader(config)
 						continue
 					}
 
@@ -433,7 +438,8 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 						WithField("Event Name", subscribeBuilder.eventName).
 						Error("unable to subscribe", errRead)
 
-					return
+					reader = kafka.NewReader(config)
+					continue
 				}
 
 				err := client.processMessage(subscribeBuilder, consumerMessage, topic)
@@ -560,14 +566,18 @@ func (client *KafkaClient) processMessage(subscribeBuilder *SubscribeBuilder, me
 
 // unmarshal unmarshal received message into event struct
 func unmarshal(message kafka.Message) (*Event, error) {
-	var event Event
+	var event *Event
 
 	err := json.Unmarshal(message.Value, &event)
 	if err != nil {
 		return &Event{}, err
 	}
 
-	return &event, nil
+	event.Partition = message.Partition
+	event.Offset = message.Offset
+	event.Key = string(message.Key)
+
+	return event, nil
 }
 
 // runCallback run callback function when receive an event
@@ -577,14 +587,15 @@ func (client *KafkaClient) runCallback(
 ) error {
 	return subscribeBuilder.callback(subscribeBuilder.ctx, &Event{
 		ID:               event.ID,
-		ClientID:         event.ClientID,
 		EventName:        event.EventName,
 		Namespace:        event.Namespace,
-		UserID:           event.UserID,
-		SessionID:        event.SessionID,
+		ClientID:         event.ClientID,
 		TraceID:          event.TraceID,
 		SpanContext:      event.SpanContext,
+		UserID:           event.UserID,
+		SessionID:        event.SessionID,
 		Timestamp:        event.Timestamp,
+		Version:          event.Version,
 		EventID:          event.EventID,
 		EventType:        event.EventType,
 		EventLevel:       event.EventLevel,
@@ -593,8 +604,11 @@ func (client *KafkaClient) runCallback(
 		TargetUserIDs:    event.TargetUserIDs,
 		TargetNamespace:  event.TargetNamespace,
 		Privacy:          event.Privacy,
-		Version:          event.Version,
+		Topic:            subscribeBuilder.topic,
 		AdditionalFields: event.AdditionalFields,
 		Payload:          event.Payload,
+		Partition:        event.Partition,
+		Offset:           event.Offset,
+		Key:              event.Key,
 	}, nil)
 }

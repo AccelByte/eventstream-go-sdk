@@ -36,7 +36,7 @@ func constructTopic(prefix, topic string) string {
 // constructGroupID construct groupID or queue group name
 func constructGroupID(prefix, groupID string) string {
 	if groupID == "" {
-		groupID = defaultGroupID
+		return ""
 	}
 
 	return prefix + separator + groupID
