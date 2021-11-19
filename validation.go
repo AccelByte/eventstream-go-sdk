@@ -18,27 +18,50 @@ package eventstream
 
 import (
 	"context"
-	"errors"
+	"regexp"
 
 	validator "github.com/AccelByte/justice-input-validation-go"
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
 
+const TopicEventPattern = "^[a-zA-Z0-9]+((['_.-][a-zA-Z0-9])?[a-zA-Z0-9]*)*$"
+
 var (
-	errInvalidPubStruct = errors.New("publish struct isn't valid")
-	errInvalidSubStruct = errors.New("subscribe struct isn't valid")
-	errInvalidUserID    = errors.New("userID isn't valid")
-	errInvalidClientID  = errors.New("clientID isn't valid")
-	errInvalidSessionID = errors.New("sessionID isn't valid")
-	errInvalidTraceID   = errors.New("traceID isn't valid")
-	errInvalidCallback  = errors.New("callback should not be nil")
+	errInvalidPubStruct       = errors.New("publish struct isn't valid")
+	errInvalidTopicFormat     = errors.New("topic format isn't valid")
+	errInvalidEventNameFormat = errors.New("eventname format isn't valid")
+	errInvalidUserID          = errors.New("userID isn't valid")
+	errInvalidClientID        = errors.New("clientID isn't valid")
+	errInvalidSessionID       = errors.New("sessionID isn't valid")
+	errInvalidTraceID         = errors.New("traceID isn't valid")
+	errInvalidCallback        = errors.New("callback should not be nil")
 )
 
 // validatePublishEvent validate published event
 func validatePublishEvent(publishBuilder *PublishBuilder, strictValidation bool) error {
+
+	for _, topic := range publishBuilder.topic {
+		if isTopicValid := validateTopicEvent(topic); !isTopicValid {
+			logrus.
+				WithField("Topic Name", topic).
+				WithField("Event Name", publishBuilder.eventName).
+				Errorf("unable to validate publisher event. error: invalid topic format")
+			return errInvalidTopicFormat
+		}
+	}
+
+	if isEventNameValid := validateTopicEvent(publishBuilder.eventName); !isEventNameValid {
+		logrus.
+			WithField("Topic Name", publishBuilder.topic).
+			WithField("Event Name", publishBuilder.eventName).
+			Errorf("unable to validate publisher event. error: invalid event name format")
+		return errInvalidEventNameFormat
+	}
+
 	publishEvent := struct {
 		Topic     []string `valid:"required"`
-		EventName string   `valid:"alphanum,stringlength(1|256),required"`
+		EventName string   `valid:"required"`
 		Namespace string
 		ClientID  string
 		UserID    string
@@ -56,8 +79,11 @@ func validatePublishEvent(publishBuilder *PublishBuilder, strictValidation bool)
 
 	valid, err := validator.ValidateStruct(publishEvent)
 	if err != nil {
-		logrus.Errorf("unable to validate publish event. error : %v", err)
-		return errInvalidPubStruct
+		logrus.
+			WithField("Topic Name", publishEvent.Topic).
+			WithField("Event Name", publishEvent.EventName).
+			Errorf("unable to validate publisher event. error : %v", err)
+		return err
 	}
 
 	if !valid {
@@ -88,10 +114,27 @@ func validatePublishEvent(publishBuilder *PublishBuilder, strictValidation bool)
 
 // validateSubscribeEvent validate subscribe event
 func validateSubscribeEvent(subscribeBuilder *SubscribeBuilder) error {
+
+	if isTopicValid := validateTopicEvent(subscribeBuilder.topic); !isTopicValid {
+		logrus.
+			WithField("Topic Name", subscribeBuilder.topic).
+			WithField("Event Name", subscribeBuilder.eventName).
+			Errorf("unable to validate subscribe event. error: invalid topic format")
+		return errInvalidTopicFormat
+	}
+
+	if isEventNameValid := validateTopicEvent(subscribeBuilder.eventName); !isEventNameValid {
+		logrus.
+			WithField("Topic Name", subscribeBuilder.topic).
+			WithField("Event Name", subscribeBuilder.eventName).
+			Errorf("unable to validate subscribe event. error: invalid event name format")
+		return errInvalidEventNameFormat
+	}
+
 	subscribeEvent := struct {
 		Topic     string `valid:"required"`
-		EventName string `valid:"alphanum,stringlength(1|256),required"`
-		GroupID   string `valid:"alphanum,stringlength(1|256),required"`
+		EventName string `valid:"required"`
+		GroupID   string
 		Callback  func(ctx context.Context, event *Event, err error) error
 	}{
 		Topic:     subscribeBuilder.topic,
@@ -102,8 +145,11 @@ func validateSubscribeEvent(subscribeBuilder *SubscribeBuilder) error {
 
 	_, err := validator.ValidateStruct(subscribeEvent)
 	if err != nil {
-		logrus.Errorf("unable to validate subscribe event. error : %v", err)
-		return errInvalidSubStruct
+		logrus.
+			WithField("Topic Name", subscribeBuilder.topic).
+			WithField("Event Name", subscribeBuilder.eventName).
+			Errorf("unable to validate subscribe event. error : %v", err)
+		return err
 	}
 
 	if subscribeEvent.Callback == nil {
@@ -111,4 +157,12 @@ func validateSubscribeEvent(subscribeBuilder *SubscribeBuilder) error {
 	}
 
 	return nil
+}
+
+func validateTopicEvent(value string) bool {
+	validRegex, err := regexp.Compile(TopicEventPattern)
+	if err != nil {
+		return false
+	}
+	return validRegex.MatchString(value)
 }
