@@ -422,6 +422,15 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 			default:
 				consumerMessage, errRead := reader.FetchMessage(subscribeBuilder.ctx)
 				if errRead != nil {
+					logrus.
+						WithField("Topic Name", topic).
+						WithField("Event Name", subscribeBuilder.eventName).
+						Error("unable to subscribe", errRead)
+
+					if errClose := reader.Close(); errClose != nil {
+						logrus.Error("unable to close subscriber", err)
+					}
+
 					if subscribeBuilder.ctx.Err() != nil {
 						// the subscription is shutting down. triggered by an external context cancellation
 						logrus.
@@ -432,11 +441,6 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 						reader = kafka.NewReader(config)
 						continue
 					}
-
-					logrus.
-						WithField("Topic Name", topic).
-						WithField("Event Name", subscribeBuilder.eventName).
-						Error("unable to subscribe", errRead)
 
 					reader = kafka.NewReader(config)
 					continue
