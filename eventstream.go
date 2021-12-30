@@ -310,14 +310,14 @@ func (s *SubscribeBuilder) Context(ctx context.Context) *SubscribeBuilder {
 	return s
 }
 
-func NewClient(prefix, stream string, brokers []string, config ...*BrokerConfig) (Client, error) {
+func NewClient(prefix, stream string, brokers []string, brokerConfig *BrokerConfig, readerConfig kafka.ReaderConfig) (Client, error) {
 	switch stream {
 	case eventStreamNull:
 		return newBlackholeClient(), nil
 	case eventStreamStdout:
 		return newStdoutClient(prefix), nil
 	case eventStreamKafka:
-		return newKafkaClient(brokers, prefix, config...)
+		return newKafkaClient(brokers, prefix, brokerConfig, readerConfig)
 	default:
 		return nil, errors.New("unsupported stream")
 	}

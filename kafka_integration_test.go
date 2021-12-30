@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/mitchellh/mapstructure"
+	"github.com/segmentio/kafka-go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -57,7 +58,8 @@ func createKafkaClient(t *testing.T) Client {
 	}
 
 	brokerList := []string{"localhost:9092"}
-	client, _ := NewClient(prefix, eventStreamKafka, brokerList, config)
+	readerConfig := kafka.ReaderConfig{} // default config
+	client, _ := NewClient(prefix, eventStreamKafka, brokerList, config, readerConfig)
 
 	return client
 }
@@ -75,7 +77,8 @@ func createInvalidKafkaClient(t *testing.T) Client {
 	}
 
 	brokerList := []string{"invalidbroker:9092"}
-	client, _ := NewClient(prefix, eventStreamKafka, brokerList, config)
+	readerConfig := kafka.ReaderConfig{} // default config
+	client, _ := NewClient(prefix, eventStreamKafka, brokerList, config, readerConfig)
 
 	return client
 }

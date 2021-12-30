@@ -21,6 +21,7 @@ import (
 	"fmt"
 
 	"github.com/AccelByte/eventstream-go-sdk/v3"
+	"github.com/segmentio/kafka-go"
 	"github.com/sirupsen/logrus"
 )
 
@@ -36,7 +37,8 @@ func main() {
 
 	prefix := "example"
 
-	client, err := eventstream.NewClient(prefix, "stdout", nil, config)
+	readerConfig := kafka.ReaderConfig{} // default config
+	client, err := eventstream.NewClient(prefix, "stdout", nil, config, readerConfig)
 	if err != nil {
 		logrus.Error(err)
 	}

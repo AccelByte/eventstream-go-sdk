@@ -127,16 +127,20 @@ func setLogLevel(logMode string) {
 }
 
 // newKafkaClient create a new instance of KafkaClient
-func newKafkaClient(brokers []string, prefix string, config ...*BrokerConfig) (*KafkaClient, error) {
+func newKafkaClient(brokers []string, prefix string, brokerConfig *BrokerConfig, readerConfig kafka.ReaderConfig) (*KafkaClient, error) {
 	logrus.Info("create new kafka client")
 
 	writerConfig := &kafka.WriterConfig{
 		Brokers: brokers,
 	}
 
-	readerConfig := &kafka.ReaderConfig{
-		Brokers:  brokers,
-		MaxBytes: defaultReaderSize,
+	// Note: Use these field on ReaderConfig to tweak throughput vs. latency: MaxBytes, MinBytes, MaxWait, QueueCapacity, CommitInterval.
+	if len(readerConfig.Brokers) > 0 {
+		logrus.Warnf("brokers list specified twice, using broker list %v", brokers)
+	}
+	readerConfig.Brokers = brokers
+	if readerConfig.MaxBytes == 0 {
+		readerConfig.MaxBytes = defaultReaderSize
 	}
 
 	// set client configuration
@@ -145,17 +149,17 @@ func newKafkaClient(brokers []string, prefix string, config ...*BrokerConfig) (*
 
 	var err error
 
-	if len(config) > 0 {
-		err = setConfig(writerConfig, readerConfig, config[0])
-		strictValidation = config[0].StrictValidation
-		writerConfig.Balancer = config[0].Balancer
+	if brokerConfig != nil {
+		err = setConfig(writerConfig, &readerConfig, brokerConfig)
+		strictValidation = brokerConfig.StrictValidation
+		writerConfig.Balancer = brokerConfig.Balancer
 	}
 
 	return &KafkaClient{
 		prefix:           prefix,
 		strictValidation: strictValidation,
 		publishConfig:    *writerConfig,
-		subscribeConfig:  *readerConfig,
+		subscribeConfig:  readerConfig,
 		subscribers:      make(map[*SubscribeBuilder]struct{}),
 		writers:          make(map[string]*kafka.Writer),
 	}, err
