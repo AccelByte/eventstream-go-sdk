@@ -505,12 +505,12 @@ func (client *KafkaClient) registerSubscriber(subscribeBuilder *SubscribeBuilder
 
 // getWriter get a writer based on config
 func (client *KafkaClient) getWriter(config kafka.WriterConfig) *kafka.Writer {
+	client.pubLock.Lock()
+	defer client.pubLock.Unlock()
+
 	if writer, ok := client.writers[config.Topic]; ok {
 		return writer
 	}
-
-	client.pubLock.Lock()
-	defer client.pubLock.Unlock()
 
 	if _, ok := client.writers[config.Topic]; !ok {
 		writer := kafka.NewWriter(config)
