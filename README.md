@@ -82,6 +82,7 @@ err := client.Publish(
 			Topic(TopicName).
 			EventName(EventName).
 			Namespace(Namespace).
+			Key(Key).
 			ClientID(ClientID).
 			UserID(UserID).
 			SessionID(SessionID).
@@ -104,8 +105,10 @@ err := client.Publish(
 
 #### Parameter 
 * Topic : List of topic / channel. (variadic string - alphaNumeric(256) - Required)
-* EventName : Event name. (string - alphaNumeric(256) - Required) * Namespace : Event namespace. (string - alphaNumeric(256) - Required)
-* ClientID : Publisher client ID. (string - UUID v4 without Hyphens)
+* EventName : Event name. (string - alphaNumeric(256) - Required) 
+* Namespace : Event namespace. (string - alphaNumeric(256) - Required)
+* key : Kafka message key. (string - default. random UUID v4 without Hyphens - optional)
+* ClientID : Publisher client ID. (string - UUID v4 without Hyphens)7
 * UserID : Publisher user ID. (string - UUID v4 without Hyphens)
 * SessionID : Publisher session ID. (string - UUID v4 without Hyphens)
 * TraceID : Trace ID. (string - UUID v4 without Hyphens)
@@ -169,7 +172,7 @@ cancel() // cancel context to unsubscribe
 * Topic : Subscribed topic. (string - alphaNumeric(256) - Required)
 * EventName : Event name. (string - alphaNumeric(256) - Required)
 * Namespace : Event namespace. (string - alphaNumeric(256) - Required)
-* GroupID : Message broker group / queue ID. (string - alphaNumeric(256) - default: `*`)
+* GroupID : Message broker group / queue ID. Required for consumer group. (string - alphaNumeric(256) - default: blank)
 * Context : Golang context. (context - default: context.background)
 * Callback : Callback function when receive event. (func(ctx context.Context,event *Event, err error) error {} - required)
 * Offset : Offset(position) inside the topic from which processing begins(int64 - Optional - default: `-1` (the tail))
