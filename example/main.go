@@ -27,7 +27,6 @@ import (
 // nolint: funlen
 func main() {
 	config := &eventstream.BrokerConfig{
-		LogMode:          eventstream.InfoLevel,
 		StrictValidation: true,
 		DialTimeout:      0,
 		ReadTimeout:      0,
