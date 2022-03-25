@@ -75,7 +75,6 @@ type Event struct {
 
 // BrokerConfig is custom configuration for message broker
 type BrokerConfig struct {
-	LogMode          string
 	StrictValidation bool
 	CACertFile       string
 	DialTimeout      time.Duration

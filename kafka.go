@@ -23,7 +23,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"sync"
 	"time"
 
@@ -106,24 +105,7 @@ func setConfig(writerConfig *kafka.WriterConfig, readerConfig *kafka.ReaderConfi
 		readerConfig.Dialer = dialer
 	}
 
-	setLogLevel(config.LogMode)
-
 	return nil
-}
-
-func setLogLevel(logMode string) {
-	switch logMode {
-	case DebugLevel:
-		logrus.SetLevel(logrus.DebugLevel)
-	case InfoLevel:
-		logrus.SetLevel(logrus.InfoLevel)
-	case WarnLevel:
-		logrus.SetLevel(logrus.WarnLevel)
-	case ErrorLevel:
-		logrus.SetLevel(logrus.ErrorLevel)
-	default:
-		logrus.SetOutput(ioutil.Discard)
-	}
 }
 
 // newKafkaClient create a new instance of KafkaClient
