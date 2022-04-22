@@ -28,6 +28,7 @@ import (
 
 	"github.com/cenkalti/backoff"
 	"github.com/segmentio/kafka-go"
+	"github.com/segmentio/kafka-go/snappy"
 	"github.com/sirupsen/logrus"
 )
 
@@ -71,12 +72,46 @@ type KafkaClient struct {
 }
 
 func setConfig(writerConfig *kafka.WriterConfig, readerConfig *kafka.ReaderConfig, config *BrokerConfig) error {
+	// writer
 	if config.ReadTimeout != 0 {
 		writerConfig.ReadTimeout = config.ReadTimeout
 	}
 
 	if config.WriteTimeout != 0 {
 		writerConfig.WriteTimeout = config.WriteTimeout
+	}
+
+	if config.WriterBatchBytes != 0 {
+		writerConfig.BatchBytes = config.WriterBatchBytes
+	}
+
+	if config.WriterBatchBytes != 0 {
+		writerConfig.BatchBytes = config.WriterBatchBytes
+	}
+
+	if config.WriterBatchSize != 0 {
+		writerConfig.BatchSize = config.WriterBatchSize
+	}
+
+	if config.WriterBatchTimeout != 0 {
+		writerConfig.BatchTimeout = config.WriterBatchTimeout
+	}
+
+	writerConfig.Async = config.WriterAsync
+
+	writerConfig.CompressionCodec = snappy.NewCompressionCodec()
+
+	// reader
+	if config.ReaderMinBytes != 0 {
+		readerConfig.MinBytes = config.ReaderMinBytes
+	}
+
+	if config.ReaderMaxBytes != 0 {
+		readerConfig.MaxBytes = config.ReaderMaxBytes
+	}
+
+	if config.ReaderMaxWait != 0 {
+		readerConfig.MaxWait = config.ReaderMaxWait
 	}
 
 	dialer := &kafka.Dialer{}
@@ -117,8 +152,7 @@ func newKafkaClient(brokers []string, prefix string, config ...*BrokerConfig) (*
 	}
 
 	readerConfig := &kafka.ReaderConfig{
-		Brokers:  brokers,
-		MaxBytes: defaultReaderSize,
+		Brokers: brokers,
 	}
 
 	// set client configuration
@@ -360,7 +394,6 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 		config.Topic = topic
 		config.GroupID = groupID
 		config.StartOffset = subscribeBuilder.offset
-		config.MaxWait = kafkaMaxWait
 		reader := kafka.NewReader(config)
 
 		var eventProcessingFailed bool

@@ -81,6 +81,17 @@ type BrokerConfig struct {
 	ReadTimeout      time.Duration
 	WriteTimeout     time.Duration
 	Balancer         kafka.Balancer
+
+	// writer
+	WriterBatchBytes   int
+	WriterBatchSize    int
+	WriterBatchTimeout time.Duration
+	WriterAsync        bool
+
+	// reader
+	ReaderMinBytes int
+	ReaderMaxBytes int
+	ReaderMaxWait  time.Duration
 }
 
 // PublishBuilder defines the structure of message which is sent through message broker
