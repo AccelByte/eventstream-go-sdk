@@ -33,3 +33,8 @@ func (client *BlackholeClient) Register(subscribeBuilder *SubscribeBuilder) erro
 	// do nothing
 	return nil
 }
+
+func (client *BlackholeClient) PublishSync(publishBuidler *PublishBuilder) error {
+	// do nothing
+	return nil
+}

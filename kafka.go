@@ -206,6 +206,41 @@ func (client *KafkaClient) Publish(publishBuilder *PublishBuilder) error {
 	return nil
 }
 
+// PublishSync send an event synchronously (blocking, without retry)
+func (client *KafkaClient) PublishSync(publishBuilder *PublishBuilder) error {
+	if publishBuilder == nil {
+		logrus.Error(errPubNilEvent)
+		return errPubNilEvent
+	}
+
+	err := validatePublishEvent(publishBuilder, client.strictValidation)
+	if err != nil {
+		logrus.
+			WithField("Topic Name", publishBuilder.topic).
+			WithField("Event Name", publishBuilder.eventName).
+			Error("incorrect publisher event: ", err)
+		return err
+	}
+
+	message, _, err := ConstructEvent(publishBuilder)
+	if err != nil {
+		logrus.
+			WithField("Topic Name", publishBuilder.topic).
+			WithField("Event Name", publishBuilder.eventName).
+			Error("unable to construct event: ", err)
+		return fmt.Errorf("unable to construct event : %s , error : %v", publishBuilder.eventName, err)
+	}
+
+	config := client.publishConfig
+	if len(publishBuilder.topic) != 1 {
+		return fmt.Errorf("incorrect number of topics for sync publish")
+	}
+
+	topic := constructTopic(client.prefix, publishBuilder.topic[0])
+
+	return client.publishEvent(publishBuilder.ctx, topic, publishBuilder.eventName, config, message)
+}
+
 // Publish send event to a topic
 func (client *KafkaClient) publishEvent(ctx context.Context, topic, eventName string, config kafka.WriterConfig,
 	message kafka.Message) (err error) {

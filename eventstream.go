@@ -325,5 +325,6 @@ func NewClient(prefix, stream string, brokers []string, config ...*BrokerConfig)
 // Client is an interface for event stream functionality
 type Client interface {
 	Publish(publishBuilder *PublishBuilder) error
+	PublishSync(publishBuilder *PublishBuilder) error
 	Register(subscribeBuilder *SubscribeBuilder) error
 }
