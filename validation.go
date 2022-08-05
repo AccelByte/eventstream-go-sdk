@@ -38,6 +38,16 @@ var (
 	errInvalidCallback        = errors.New("callback should not be nil")
 )
 
+var topicRegex *regexp.Regexp = nil
+
+func init () {
+	validRegex, err := regexp.Compile(TopicEventPattern)
+	if err != nil {
+		panic(err)
+	}
+	topicRegex = validRegex
+}
+
 // validatePublishEvent validate published event
 func validatePublishEvent(publishBuilder *PublishBuilder, strictValidation bool) error {
 
@@ -160,9 +170,5 @@ func validateSubscribeEvent(subscribeBuilder *SubscribeBuilder) error {
 }
 
 func validateTopicEvent(value string) bool {
-	validRegex, err := regexp.Compile(TopicEventPattern)
-	if err != nil {
-		return false
-	}
-	return validRegex.MatchString(value)
+	return topicRegex.MatchString(value)
 }
