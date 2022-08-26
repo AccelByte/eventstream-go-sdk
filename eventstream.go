@@ -46,27 +46,27 @@ const (
 
 // Event defines the structure of event
 type Event struct {
-	ID               string                 `json:"id"`
-	EventName        string                 `json:"name"`
-	Namespace        string                 `json:"namespace"`
-	ClientID         string                 `json:"clientId"`
-	TraceID          string                 `json:"traceId"`
-	SpanContext      string                 `json:"spanContext"`
-	UserID           string                 `json:"userId"`
-	SessionID        string                 `json:"sessionId"`
-	Timestamp        string                 `json:"timestamp"`
-	Version          int                    `json:"version"`
-	EventID          int                    `json:"event_id"`
-	EventType        int                    `json:"event_type"`
-	EventLevel       int                    `json:"event_level"`
-	ServiceName      string                 `json:"service"`
-	ClientIDs        []string               `json:"client_ids"`
-	TargetUserIDs    []string               `json:"target_user_ids"`
-	TargetNamespace  string                 `json:"target_namespace"`
-	Privacy          bool                   `json:"privacy"`
-	Topic            string                 `json:"topic"`
+	ID               string                 `json:"id,omitempty"`
+	EventName        string                 `json:"name,omitempty"`
+	Namespace        string                 `json:"namespace,omitempty"`
+	ClientID         string                 `json:"clientId,omitempty"`
+	TraceID          string                 `json:"traceId,omitempty"`
+	SpanContext      string                 `json:"spanContext,omitempty"`
+	UserID           string                 `json:"userId,omitempty"`
+	SessionID        string                 `json:"sessionId,omitempty"`
+	Timestamp        string                 `json:"timestamp,omitempty"`
+	Version          int                    `json:"version,omitempty"`
+	EventID          int                    `json:"event_id,omitempty"`
+	EventType        int                    `json:"event_type,omitempty"`
+	EventLevel       int                    `json:"event_level,omitempty"`
+	ServiceName      string                 `json:"service,omitempty"`
+	ClientIDs        []string               `json:"client_ids,omitempty"`
+	TargetUserIDs    []string               `json:"target_user_ids,omitempty"`
+	TargetNamespace  string                 `json:"target_namespace,omitempty"`
+	Privacy          bool                   `json:"privacy,omitempty"`
+	Topic            string                 `json:"topic,omitempty"`
 	AdditionalFields map[string]interface{} `json:"additional_fields,omitempty"`
-	Payload          map[string]interface{} `json:"payload"`
+	Payload          map[string]interface{} `json:"payload,omitempty"`
 
 	Partition int    `json:",omitempty"`
 	Offset    int64  `json:",omitempty"`
@@ -325,5 +325,6 @@ func NewClient(prefix, stream string, brokers []string, config ...*BrokerConfig)
 // Client is an interface for event stream functionality
 type Client interface {
 	Publish(publishBuilder *PublishBuilder) error
+	PublishSync(publishBuilder *PublishBuilder) error
 	Register(subscribeBuilder *SubscribeBuilder) error
 }

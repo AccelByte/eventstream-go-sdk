@@ -37,6 +37,10 @@ func newStdoutClient(prefix string) *StdoutClient {
 	}
 }
 
+func (client *StdoutClient) PublishSync(publishBuilder *PublishBuilder) error {
+	return client.Publish(publishBuilder)
+}
+
 // Publish print event to console
 func (client *StdoutClient) Publish(publishBuilder *PublishBuilder) error {
 	if publishBuilder == nil {

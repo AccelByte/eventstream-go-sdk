@@ -117,8 +117,10 @@ func newKafkaClient(brokers []string, prefix string, config ...*BrokerConfig) (*
 	}
 
 	readerConfig := &kafka.ReaderConfig{
-		Brokers:  brokers,
-		MaxBytes: defaultReaderSize,
+		Brokers:        brokers,
+		MaxBytes:       defaultReaderSize,
+		MaxWait:        kafkaMaxWait,
+		CommitInterval: 100 * time.Millisecond, // 0 means synchronous (slow), > 0 is async.
 	}
 
 	// set client configuration
@@ -204,6 +206,41 @@ func (client *KafkaClient) Publish(publishBuilder *PublishBuilder) error {
 	}
 
 	return nil
+}
+
+// PublishSync send an event synchronously (blocking, without retry)
+func (client *KafkaClient) PublishSync(publishBuilder *PublishBuilder) error {
+	if publishBuilder == nil {
+		logrus.Error(errPubNilEvent)
+		return errPubNilEvent
+	}
+
+	err := validatePublishEvent(publishBuilder, client.strictValidation)
+	if err != nil {
+		logrus.
+			WithField("Topic Name", publishBuilder.topic).
+			WithField("Event Name", publishBuilder.eventName).
+			Error("incorrect publisher event: ", err)
+		return err
+	}
+
+	message, _, err := ConstructEvent(publishBuilder)
+	if err != nil {
+		logrus.
+			WithField("Topic Name", publishBuilder.topic).
+			WithField("Event Name", publishBuilder.eventName).
+			Error("unable to construct event: ", err)
+		return fmt.Errorf("unable to construct event : %s , error : %v", publishBuilder.eventName, err)
+	}
+
+	config := client.publishConfig
+	if len(publishBuilder.topic) != 1 {
+		return fmt.Errorf("incorrect number of topics for sync publish")
+	}
+
+	topic := constructTopic(client.prefix, publishBuilder.topic[0])
+
+	return client.publishEvent(publishBuilder.ctx, topic, publishBuilder.eventName, config, message)
 }
 
 // Publish send event to a topic
@@ -360,7 +397,6 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 		config.Topic = topic
 		config.GroupID = groupID
 		config.StartOffset = subscribeBuilder.offset
-		config.MaxWait = kafkaMaxWait
 		reader := kafka.NewReader(config)
 
 		var eventProcessingFailed bool
@@ -407,7 +443,7 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 					logrus.
 						WithField("Topic Name", topic).
 						WithField("Event Name", subscribeBuilder.eventName).
-						Error("unable to subscribe", errRead)
+						Error("subscriber unable to fetch message", errRead)
 
 					if errClose := reader.Close(); errClose != nil {
 						logrus.Error("unable to close subscriber", err)
