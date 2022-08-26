@@ -117,8 +117,10 @@ func newKafkaClient(brokers []string, prefix string, config ...*BrokerConfig) (*
 	}
 
 	readerConfig := &kafka.ReaderConfig{
-		Brokers:  brokers,
-		MaxBytes: defaultReaderSize,
+		Brokers:        brokers,
+		MaxBytes:       defaultReaderSize,
+		MaxWait:        kafkaMaxWait,
+		CommitInterval: 100 * time.Millisecond, // 0 means synchronous (slow), > 0 is async.
 	}
 
 	// set client configuration
@@ -392,14 +394,9 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 
 	go func() {
 		config := client.subscribeConfig
-		// TODO: clean this config up. We set it at 3 or more different places.
 		config.Topic = topic
 		config.GroupID = groupID
 		config.StartOffset = subscribeBuilder.offset
-		config.MaxWait = kafkaMaxWait
-		config.RebalanceTimeout = 10 * time.Second
-		config.CommitInterval = 100 * time.Millisecond // 0 means synchronous (slow). "Note, if 'processing.guarantee' is set to 'exactly_once', the default value is 100, otherwise the default value is 30000."
-		config.MaxBytes = 10 * 1024 * 1024             // see defaultReaderSize
 		reader := kafka.NewReader(config)
 
 		var eventProcessingFailed bool
@@ -446,7 +443,7 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 					logrus.
 						WithField("Topic Name", topic).
 						WithField("Event Name", subscribeBuilder.eventName).
-						Error("unable to subscribe", errRead)
+						Error("subscriber unable to fetch message", errRead)
 
 					if errClose := reader.Close(); errClose != nil {
 						logrus.Error("unable to close subscriber", err)
@@ -459,7 +456,7 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 							WithField("Event Name", subscribeBuilder.eventName).
 							Debug("triggered an external context cancellation. Cancelling the subscription")
 
-						reader = kafka.NewReader(config) // TODO, why?
+						reader = kafka.NewReader(config)
 						continue
 					}
 
@@ -475,7 +472,7 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 						Error("unable to process the event: ", err)
 
 					// shutdown current subscriber and mark it for restarting
-					eventProcessingFailed = true // TODO don't restart?
+					eventProcessingFailed = true
 
 					return
 				}
