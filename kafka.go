@@ -144,7 +144,6 @@ func newKafkaClient(brokers []string, prefix string, config ...*BrokerConfig) (*
 }
 
 // Publish send event to single or multiple topic with exponential backoff retry
-// TODO remove the retry, because the lib already retries batches.
 func (client *KafkaClient) Publish(publishBuilder *PublishBuilder) error {
 	if publishBuilder == nil {
 		logrus.Error(errPubNilEvent)
