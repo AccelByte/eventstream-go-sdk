@@ -28,6 +28,7 @@ import (
 
 	"github.com/cenkalti/backoff"
 	"github.com/segmentio/kafka-go"
+	"github.com/segmentio/kafka-go/sasl/scram"
 	"github.com/sirupsen/logrus"
 )
 
@@ -35,6 +36,7 @@ const (
 	defaultReaderSize = 10e6 // 10MB
 	maxBackOffCount   = 3
 	kafkaMaxWait      = time.Second
+	saslScramAuth     = "SASL-SCRAM"
 )
 
 var (
@@ -86,12 +88,27 @@ func setConfig(writerConfig *kafka.WriterConfig, readerConfig *kafka.ReaderConfi
 		readerConfig.Dialer = dialer
 	}
 
+	if config.SecurityConfig.AuthenticationType == saslScramAuth {
+		if config.CACertFile == "" {
+			err := errors.New(fmt.Sprintf("CA Cert File is required for %s authentication", saslScramAuth))
+			logrus.Error("unable to initialize kafka scram authentication", err)
+			return err
+		}
+
+		mechanism, err := scram.Mechanism(scram.SHA512, config.SecurityConfig.SASLUsername, config.SecurityConfig.SASLPassword)
+		if err != nil {
+			logrus.Error("unable to initialize kafka scram authentication", err)
+			return err
+		}
+		dialer.SASLMechanism = mechanism
+	}
+
 	if config.CACertFile != "" {
 		logrus.Debug("set TLS certificate")
 
 		cert, err := GetTLSCertFromFile(config.CACertFile)
 		if err != nil {
-			logrus.Error(err, "unable to get TLS certificate")
+			logrus.Error("unable to get TLS certificate", err)
 			return err
 		}
 
