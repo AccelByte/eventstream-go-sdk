@@ -58,6 +58,25 @@ SDK support with custom configuration for kafka stream, that is :
 	}
 ```
 
+#### Authentication
+Supported authentication mode for kafka stream:
+
+**1. SASL SCRAM**
+
+Example configuration:
+
+```go
+    config := &eventstream.BrokerConfig{
+        ...
+        SecurityConfig: &eventstream.SecurityConfig{
+            AuthenticationType: "SASL-SCRAM",
+            SASLUsername:       "your-username",
+            SASLPassword:       "your-password",
+        },
+        CACertFile: "path-to-cacert-file", 
+    }
+```
+
 ### Stdout Stream
 This stream is for testing purpose. This will print the event in stdout. It should not be used in production since this 
 will print unnecessary log.

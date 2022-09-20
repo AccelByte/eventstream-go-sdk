@@ -81,6 +81,14 @@ type BrokerConfig struct {
 	ReadTimeout      time.Duration
 	WriteTimeout     time.Duration
 	Balancer         kafka.Balancer
+	SecurityConfig   *SecurityConfig
+}
+
+// SecurityConfig contains security configuration for message broker
+type SecurityConfig struct {
+	AuthenticationType string
+	SASLUsername       string
+	SASLPassword       string
 }
 
 // PublishBuilder defines the structure of message which is sent through message broker
