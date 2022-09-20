@@ -88,7 +88,7 @@ func setConfig(writerConfig *kafka.WriterConfig, readerConfig *kafka.ReaderConfi
 		readerConfig.Dialer = dialer
 	}
 
-	if config.SecurityConfig.AuthenticationType == saslScramAuth {
+	if config.SecurityConfig != nil && config.SecurityConfig.AuthenticationType == saslScramAuth {
 		if config.CACertFile == "" {
 			err := errors.New(fmt.Sprintf("CA Cert File is required for %s authentication", saslScramAuth))
 			logrus.Error("unable to initialize kafka scram authentication", err)
