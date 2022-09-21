@@ -73,7 +73,6 @@ Example configuration:
             SASLUsername:       "your-username",
             SASLPassword:       "your-password",
         },
-        CACertFile: "path-to-cacert-file", 
     }
 ```
 
