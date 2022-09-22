@@ -84,23 +84,17 @@ func setConfig(writerConfig *kafka.WriterConfig, readerConfig *kafka.ReaderConfi
 	dialer := &kafka.Dialer{}
 	if config.DialTimeout != 0 {
 		dialer.Timeout = config.DialTimeout
-		writerConfig.Dialer = dialer
-		readerConfig.Dialer = dialer
 	}
 
 	if config.SecurityConfig != nil && config.SecurityConfig.AuthenticationType == saslScramAuth {
-		if config.CACertFile == "" {
-			err := errors.New(fmt.Sprintf("CA Cert File is required for %s authentication", saslScramAuth))
-			logrus.Error("unable to initialize kafka scram authentication", err)
-			return err
-		}
-
 		mechanism, err := scram.Mechanism(scram.SHA512, config.SecurityConfig.SASLUsername, config.SecurityConfig.SASLPassword)
 		if err != nil {
 			logrus.Error("unable to initialize kafka scram authentication", err)
 			return err
 		}
 		dialer.SASLMechanism = mechanism
+		dialer.DualStack = true
+		dialer.TLS = &tls.Config{}
 	}
 
 	if config.CACertFile != "" {
@@ -117,10 +111,10 @@ func setConfig(writerConfig *kafka.WriterConfig, readerConfig *kafka.ReaderConfi
 		}
 
 		dialer.TLS = tlsConfig
-
-		writerConfig.Dialer = dialer
-		readerConfig.Dialer = dialer
 	}
+
+	writerConfig.Dialer = dialer
+	readerConfig.Dialer = dialer
 
 	return nil
 }
