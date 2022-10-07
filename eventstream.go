@@ -262,12 +262,13 @@ func (p *PublishBuilder) Context(ctx context.Context) *PublishBuilder {
 
 // SubscribeBuilder defines the structure of message which is sent through message broker
 type SubscribeBuilder struct {
-	topic     string
-	groupID   string
-	offset    int64
-	callback  func(ctx context.Context, event *Event, err error) error
-	eventName string
-	ctx       context.Context
+	topic       string
+	groupID     string
+	offset      int64
+	callback    func(ctx context.Context, event *Event, err error) error
+	eventName   string
+	ctx         context.Context
+	callbackRaw func(ctx context.Context, msgValue []byte, err error) error
 }
 
 // NewSubscribe create new SubscribeBuilder instance
@@ -307,6 +308,14 @@ func (s *SubscribeBuilder) Callback(
 	callback func(ctx context.Context, event *Event, err error) error,
 ) *SubscribeBuilder {
 	s.callback = callback
+	return s
+}
+
+// CallbackRaw callback that receives the undecoded payload
+func (s *SubscribeBuilder) CallbackRaw(
+	f func(ctx context.Context, msgValue []byte, err error) error,
+) *SubscribeBuilder {
+	s.callbackRaw = f
 	return s
 }
 

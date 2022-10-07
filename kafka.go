@@ -577,7 +577,12 @@ func (client *KafkaClient) deleteWriter(topic string) {
 
 // processMessage process a message from kafka
 func (client *KafkaClient) processMessage(subscribeBuilder *SubscribeBuilder, message kafka.Message, topic string) error {
+	if subscribeBuilder.callbackRaw != nil {
+		return subscribeBuilder.callbackRaw(subscribeBuilder.ctx, message.Value, nil)
+	}
+
 	event, err := unmarshal(message)
+
 	if err != nil {
 		logrus.
 			WithField("Topic Name", topic).
