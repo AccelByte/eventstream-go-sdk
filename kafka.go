@@ -440,7 +440,12 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 			select {
 			case <-subscribeBuilder.ctx.Done():
 				// ignore error because client isn't processing events
-				err = subscribeBuilder.callback(subscribeBuilder.ctx, nil, subscribeBuilder.ctx.Err())
+				if subscribeBuilder.callback != nil {
+					err = subscribeBuilder.callback(subscribeBuilder.ctx, nil, subscribeBuilder.ctx.Err())
+				}
+				if subscribeBuilder.callbackRaw != nil {
+					err = subscribeBuilder.callbackRaw(subscribeBuilder.ctx, nil, subscribeBuilder.ctx.Err())
+				}
 
 				logrus.
 					WithField("Topic Name", topic).
