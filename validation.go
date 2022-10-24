@@ -40,7 +40,7 @@ var (
 
 var topicRegex *regexp.Regexp = nil
 
-func init () {
+func init() {
 	validRegex, err := regexp.Compile(TopicEventPattern)
 	if err != nil {
 		panic(err)
@@ -142,15 +142,17 @@ func validateSubscribeEvent(subscribeBuilder *SubscribeBuilder) error {
 	}
 
 	subscribeEvent := struct {
-		Topic     string `valid:"required"`
-		EventName string `valid:"required"`
-		GroupID   string
-		Callback  func(ctx context.Context, event *Event, err error) error
+		Topic       string `valid:"required"`
+		EventName   string `valid:"required"`
+		GroupID     string
+		Callback    func(ctx context.Context, event *Event, err error) error
+		CallbackRaw func(ctx context.Context, msg []byte, err error) error
 	}{
-		Topic:     subscribeBuilder.topic,
-		EventName: subscribeBuilder.eventName,
-		GroupID:   subscribeBuilder.groupID,
-		Callback:  subscribeBuilder.callback,
+		Topic:       subscribeBuilder.topic,
+		EventName:   subscribeBuilder.eventName,
+		GroupID:     subscribeBuilder.groupID,
+		Callback:    subscribeBuilder.callback,
+		CallbackRaw: subscribeBuilder.callbackRaw,
 	}
 
 	_, err := validator.ValidateStruct(subscribeEvent)
@@ -162,7 +164,7 @@ func validateSubscribeEvent(subscribeBuilder *SubscribeBuilder) error {
 		return err
 	}
 
-	if subscribeEvent.Callback == nil {
+	if subscribeEvent.Callback == nil && subscribeEvent.CallbackRaw == nil {
 		return errInvalidCallback
 	}
 
