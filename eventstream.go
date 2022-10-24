@@ -73,6 +73,11 @@ type Event struct {
 	Key       string `json:",omitempty"`
 }
 
+var (
+	NotificationEventNamePath       = "name"
+	FreeformNotificationUserIDsPath = [...]string{"payload", "userIds"}
+)
+
 // BrokerConfig is custom configuration for message broker
 type BrokerConfig struct {
 	StrictValidation bool
