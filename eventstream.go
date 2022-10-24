@@ -75,7 +75,7 @@ type Event struct {
 
 var (
 	NotificationEventNamePath       = "name"
-	FreeformNotificationUserIDsPath = [...]string{"payload", "userIds"}
+	FreeformNotificationUserIDsPath = []string{"payload", "userIds"}
 )
 
 // BrokerConfig is custom configuration for message broker
