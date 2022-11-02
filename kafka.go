@@ -321,6 +321,7 @@ func ConstructEvent(publishBuilder *PublishBuilder) (kafka.Message, *Event, erro
 		ID:               id,
 		EventName:        publishBuilder.eventName,
 		Namespace:        publishBuilder.namespace,
+		ParentNamespace:  publishBuilder.parentNamespace,
 		ClientID:         publishBuilder.clientID,
 		UserID:           publishBuilder.userID,
 		TraceID:          publishBuilder.traceID,
