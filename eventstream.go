@@ -49,6 +49,7 @@ type Event struct {
 	ID               string                 `json:"id,omitempty"`
 	EventName        string                 `json:"name,omitempty"`
 	Namespace        string                 `json:"namespace,omitempty"`
+	ParentNamespace  string                 `json:"parent_namespace,omitempty"`
 	ClientID         string                 `json:"clientId,omitempty"`
 	TraceID          string                 `json:"traceId,omitempty"`
 	SpanContext      string                 `json:"spanContext,omitempty"`
