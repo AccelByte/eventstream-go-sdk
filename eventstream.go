@@ -49,6 +49,7 @@ type Event struct {
 	ID               string                 `json:"id,omitempty"`
 	EventName        string                 `json:"name,omitempty"`
 	Namespace        string                 `json:"namespace,omitempty"`
+	ParentNamespace  string                 `json:"parent_namespace,omitempty"`
 	ClientID         string                 `json:"clientId,omitempty"`
 	TraceID          string                 `json:"traceId,omitempty"`
 	SpanContext      string                 `json:"spanContext,omitempty"`
@@ -101,6 +102,7 @@ type PublishBuilder struct {
 	topic            []string
 	eventName        string
 	namespace        string
+	parentNamespace  string
 	clientID         string
 	traceID          string
 	spanContext      string
@@ -146,6 +148,11 @@ func (p *PublishBuilder) EventName(eventName string) *PublishBuilder {
 // Namespace set namespace of published event
 func (p *PublishBuilder) Namespace(namespace string) *PublishBuilder {
 	p.namespace = namespace
+	return p
+}
+
+func (p *PublishBuilder) ParentNamespace(parentNamespace string) *PublishBuilder {
+	p.parentNamespace = parentNamespace
 	return p
 }
 
