@@ -371,7 +371,7 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 	logrus.
 		WithField("Topic Name", subscribeBuilder.topic).
 		WithField("Event Name", subscribeBuilder.eventName).
-		Debug("register callback")
+		Info("register callback")
 
 	err := validateSubscribeEvent(subscribeBuilder)
 	if err != nil {
@@ -386,12 +386,13 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 	topic := constructTopic(client.prefix, subscribeBuilder.topic)
 	groupID := constructGroupID(client.prefix, subscribeBuilder.groupID)
 
+	loggerFields := logrus.
+		WithField("Topic Name", topic).
+		WithField("Event Name", subscribeBuilder.eventName)
+
 	isRegistered, err := client.registerSubscriber(subscribeBuilder)
 	if err != nil {
-		logrus.
-			WithField("Topic Name", topic).
-			WithField("Event Name", subscribeBuilder.eventName).
-			Error("unable to register callback: ", err)
+		loggerFields.Error("unable to register callback: ", err)
 
 		return err
 	}
@@ -417,10 +418,7 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 			if eventProcessingFailed {
 				if subscribeBuilder.ctx.Err() != nil {
 					// the subscription is shutting down. triggered by an external context cancellation
-					logrus.
-						WithField("Topic Name", topic).
-						WithField("Event Name", subscribeBuilder.eventName).
-						Debug("triggered an external context cancellation. Cancelling the subscription")
+					loggerFields.Warn("triggered an external context cancellation. Cancelling the subscription")
 					return
 				}
 
@@ -428,9 +426,10 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 				// as we use kafka in the explicit commit mode - we can't send the "acknowledge" and have to interrupt connection
 				time.Sleep(time.Second)
 
+				loggerFields.Warn("trying to re-register because event processing failed")
 				err := client.Register(subscribeBuilder)
 				if err != nil {
-					logrus.Info(err)
+					loggerFields.Error(err)
 				}
 			}
 		}()
@@ -448,19 +447,13 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 					err = subscribeBuilder.callbackRaw(subscribeBuilder.ctx, nil, subscribeBuilder.ctx.Err())
 				}
 
-				logrus.
-					WithField("Topic Name", topic).
-					WithField("Event Name", subscribeBuilder.eventName).
-					Debug("triggered an external context cancellation. Cancelling the subscription")
+				loggerFields.Warn("triggered an external context cancellation. Cancelling the subscription")
 
 				return
 			default:
 				consumerMessage, errRead := reader.FetchMessage(subscribeBuilder.ctx)
 				if errRead != nil {
-					logrus.
-						WithField("Topic Name", topic).
-						WithField("Event Name", subscribeBuilder.eventName).
-						Error("subscriber unable to fetch message", errRead)
+					loggerFields.Error("subscriber unable to fetch message", errRead)
 
 					if errClose := reader.Close(); errClose != nil {
 						logrus.Error("unable to close subscriber", err)
@@ -468,11 +461,7 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 
 					if subscribeBuilder.ctx.Err() != nil {
 						// the subscription is shutting down. triggered by an external context cancellation
-						logrus.
-							WithField("Topic Name", topic).
-							WithField("Event Name", subscribeBuilder.eventName).
-							Debug("triggered an external context cancellation. Cancelling the subscription")
-
+						loggerFields.Warn("triggered an external context cancellation. Cancelling the subscription")
 						reader = kafka.NewReader(config)
 						continue
 					}
@@ -483,10 +472,7 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 
 				err := client.processMessage(subscribeBuilder, consumerMessage, topic)
 				if err != nil {
-					logrus.
-						WithField("Topic Name", topic).
-						WithField("Event Name", subscribeBuilder.eventName).
-						Error("unable to process the event: ", err)
+					loggerFields.Error("unable to process the event: ", err)
 
 					// shutdown current subscriber and mark it for restarting
 					eventProcessingFailed = true
@@ -498,17 +484,11 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 				if err != nil {
 					if subscribeBuilder.ctx.Err() == nil {
 						// the subscription is shutting down. triggered by an external context cancellation
-						logrus.
-							WithField("Topic Name", topic).
-							WithField("Event Name", subscribeBuilder.eventName).
-							Debug("triggered an external context cancellation. Cancelling the subscription")
+						loggerFields.Warn("triggered an external context cancellation. Cancelling the subscription")
 						continue
 					}
 
-					logrus.
-						WithField("Topic Name", topic).
-						WithField("Event Name", subscribeBuilder.eventName).
-						Error("unable to commit the event: ", err)
+					loggerFields.Error("unable to commit the event: ", err)
 				}
 			}
 		}
