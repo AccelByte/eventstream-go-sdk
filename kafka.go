@@ -37,9 +37,14 @@ const (
 	maxBackOffCount   = 3
 	kafkaMaxWait      = time.Second
 	saslScramAuth     = "SASL-SCRAM"
+
+	auditLogTopicEnvKey  = "APP_EVENT_STREAM_AUDIT_LOG_TOPIC"
+	auditLogTopicDefault = "auditLog"
 )
 
 var (
+	auditLogTopic = ""
+
 	errPubNilEvent = errors.New("unable to publish nil event")
 	errSubNilEvent = errors.New("unable to subscribe nil event")
 )
@@ -122,6 +127,8 @@ func setConfig(writerConfig *kafka.WriterConfig, readerConfig *kafka.ReaderConfi
 // newKafkaClient create a new instance of KafkaClient
 func newKafkaClient(brokers []string, prefix string, config ...*BrokerConfig) (*KafkaClient, error) {
 	logrus.Info("create new kafka client")
+
+	loadTopics()
 
 	writerConfig := &kafka.WriterConfig{
 		Brokers: brokers,
@@ -310,6 +317,49 @@ func (client *KafkaClient) publishEvent(ctx context.Context, topic, eventName st
 	return nil
 }
 
+// PublishAuditLog send an audit log message
+func (client *KafkaClient) PublishAuditLog(auditLogBuilder *AuditLogBuilder) error {
+	var topic = auditLogTopicDefault
+	if auditLogTopic != "" {
+		topic = auditLogTopic
+	}
+
+	message, err := auditLogBuilder.Build()
+	if err != nil {
+		return err
+	}
+	return client.publishAndRetryFailure(context.Background(), topic, "", message, auditLogBuilder.errorCallback)
+}
+
+// publishAndRetryFailure will publish message to kafka, if it fails, will retry at most 3 times.
+// If the message finally failed to publish, will call the error callback function to process this failure.
+func (client *KafkaClient) publishAndRetryFailure(context context.Context, topic, eventName string, message kafka.Message, failureCallback PublishErrorCallbackFunc) error {
+
+	config := client.publishConfig
+	topic = constructTopic(client.prefix, topic)
+	err := backoff.RetryNotify(func() error {
+		return client.publishEvent(context, topic, eventName, config, message)
+	}, backoff.WithMaxRetries(backoff.NewExponentialBackOff(), maxBackOffCount),
+		func(err error, _ time.Duration) {
+			logrus.WithField("topic", topic).
+				Warn("retrying publish message: ", err)
+		})
+	if err != nil {
+		logrus.WithField("topic", topic).
+			Error("retrying publish message failed: ", err)
+
+		if failureCallback != nil {
+			failureCallback(message.Value, err)
+		}
+
+		return err
+	}
+
+	logrus.WithField("topic", topic).
+		Debug("successfully publish message")
+	return nil
+}
+
 // ConstructEvent construct event message
 func ConstructEvent(publishBuilder *PublishBuilder) (kafka.Message, *Event, error) {
 	id := generateID()
@@ -361,7 +411,7 @@ func (client *KafkaClient) unregister(subscribeBuilder *SubscribeBuilder) {
 }
 
 // Register register callback function and then subscribe topic
-//nolint: gocognit,funlen
+// nolint: gocognit,funlen
 func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 	if subscribeBuilder == nil {
 		logrus.Error(errSubNilEvent)
@@ -635,4 +685,11 @@ func (client *KafkaClient) runCallback(
 		Offset:           event.Offset,
 		Key:              event.Key,
 	}, nil)
+}
+
+func loadTopics() {
+	// load audit log topic
+	if auditLogTopicName := loadEnv(auditLogTopicEnvKey); auditLogTopicName != "" {
+		auditLogTopic = auditLogTopicName
+	}
 }

@@ -38,3 +38,8 @@ func (client *BlackholeClient) PublishSync(publishBuidler *PublishBuilder) error
 	// do nothing
 	return nil
 }
+
+func (client *BlackholeClient) PublishAuditLog(auditLogBuilder *AuditLogBuilder) error {
+	// do nothing
+	return nil
+}

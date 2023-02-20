@@ -19,9 +19,10 @@ package main
 import (
 	"context"
 	"fmt"
-
 	"github.com/AccelByte/eventstream-go-sdk/v3"
+	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
+	"strings"
 )
 
 // nolint: funlen
@@ -89,4 +90,45 @@ func main() {
 	if err != nil {
 		logrus.Error(err)
 	}
+
+	err = client.Register(
+		eventstream.NewSubscribe().
+			EventName("auditLog").
+			Topic("auditLog").
+			Context(context.Background()).
+			CallbackRaw(func(ctx context.Context, msgValue []byte, err error) error {
+				if err != nil {
+					logrus.Error(err)
+				}
+				fmt.Println("-----------------------audit log received-----------------------")
+				fmt.Printf("%+v", string(msgValue))
+
+				return nil
+			}))
+
+	auditLogContent := make(map[string]interface{})
+	auditLogContent["platformId"] = "steam"
+	auditLogContent["secret"] = "steam_secret"
+	err = client.PublishAuditLog(
+		eventstream.NewAuditLogBuilder().
+			Category("test_category").
+			ActionName("test_action").
+			IP("127.0.0.1").
+			Actor(strings.Replace(uuid.New().String(), "-", "", -1)).
+			IsActorTypeUser(true).
+			ClientID(strings.Replace(uuid.New().String(), "-", "", -1)).
+			ActorNamespace("test_namespace").
+			ObjectID(strings.Replace(uuid.New().String(), "-", "", -1)).
+			ObjectNamespace("test_object_namespace").
+			TargetUserID(strings.Replace(uuid.New().String(), "-", "", -1)).
+			DeviceID("test_device").
+			Content(auditLogContent).
+			ErrorCallback(func(message []byte, err error) {
+				fmt.Printf("message: %s", string(message))
+			}),
+	)
+	if err != nil {
+		logrus.Error(err)
+	}
+
 }
