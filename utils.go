@@ -18,6 +18,7 @@ package eventstream
 
 import (
 	"encoding/json"
+	"os"
 	"strings"
 
 	"github.com/google/uuid"
@@ -57,4 +58,11 @@ func marshal(event *Event) ([]byte, error) {
 	}
 
 	return bytes, nil
+}
+
+func loadEnv(key string) string {
+	if s, exist := os.LookupEnv(key); exist && s != "" {
+		return s
+	}
+	return ""
 }

@@ -103,3 +103,13 @@ func (client *StdoutClient) Register(subscribeBuilder *SubscribeBuilder) error {
 
 	return nil
 }
+
+func (client *StdoutClient) PublishAuditLog(auditLogBuilder *AuditLogBuilder) error {
+	message, err := auditLogBuilder.Build()
+	if err != nil {
+		logrus.Errorf("unable to marshal audit log : %s , error : %v", string(message.Value), err)
+		return err
+	}
+	fmt.Println(string(message.Value))
+	return nil
+}

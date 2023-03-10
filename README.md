@@ -229,6 +229,51 @@ Event message format :
 * version : Event schema version (integer)
 * payload : Set of data / object that given by producer. Each data have own key for specific purpose. (map[string]interface{})
 
+## Publish Audit Log
+
+Publish or sent an audit log into stream. Client able to publish an audit log into single topic.
+Publish to `kafka` stream support with exponential backoff retry. (max 3x)
+
+Environment Variables:
+* APP_EVENT_STREAM_AUDIT_LOG_TOPIC(optional, default: auditLog)
+
+To publish an audit log, use this function:
+```go
+err := client.PublishAuditLog(eventstream.
+            NewAuditLogBuilder().
+            Category(Category).
+            ActionName(ActionName).
+            IP(IP).
+            Actor(Actor).
+            IsActorTypeUser(true).
+            ClientID(ClientID).
+            ActorNamespace(ActorNamespace).
+            ObjectID(ObjectID).
+            ObjectNamespace(ObjectNamespace).
+            TargetUserID(TargetUserID).
+            DeviceID(DeviceID).
+            Content(Content).
+            Diff(Diff).
+            ErrorCallback(func(message []byte, err error) {
+            })
+```
+
+#### Parameter
+* Category : Category. (string - Format: xxx_xxx - Required)
+* ActionName : Log action name. (string - Format: xxx_xxx - Required)
+* IP: IP address. (string - Optional)
+* Actor: Publisher/studio user id or client id. (string - UUID v4 without Hyphens - Required)
+* IsActorTypeUser: Is actor a user or not. (bool - true or false - Required)
+* ClientID : OAuth client ID. (string - UUID v4 without Hyphens - Required)
+* ActorNamespace : Actor namespace, should be publisher or studio namespace. (string - alphaNumeric(256) - Required)
+* ObjectID : Target resource id. (string - Optional)
+* ObjectNamespace : Namespace of target resource. (string - alphaNumeric(256) - Required)
+* TargetUserID : User id related to the resource. (string - UUID v4 without Hyphens - Optional)
+* DeviceID : Device id. (string - Optional)
+* Content : Resource Content. (map - Required)
+* Diff : Changes of the resource. (map - Recommended format: `{"before":{}, "after":{}}` - Optional)
+* ErrorCallback : Callback function when event failed to publish. (func(message []byte, err error){} - Optional)
+
 ## SpanContext usage
 * Create Jaeger Span Context from an event
 ```go

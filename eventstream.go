@@ -18,7 +18,10 @@ package eventstream
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	validator "github.com/AccelByte/justice-input-validation-go"
+	"github.com/sirupsen/logrus"
 	"time"
 
 	"github.com/segmentio/kafka-go"
@@ -28,6 +31,9 @@ const (
 	eventStreamNull   = "none"
 	eventStreamStdout = "stdout"
 	eventStreamKafka  = "kafka"
+
+	actorTypeUser   = "USER"
+	actorTypeClient = "CLIENT"
 )
 
 const (
@@ -356,4 +362,198 @@ type Client interface {
 	Publish(publishBuilder *PublishBuilder) error
 	PublishSync(publishBuilder *PublishBuilder) error
 	Register(subscribeBuilder *SubscribeBuilder) error
+	PublishAuditLog(auditLogBuilder *AuditLogBuilder) error
+}
+
+type AuditLog struct {
+	ID              string          `json:"id" valid:"required"`
+	Category        string          `json:"category" valid:"required"`
+	ActionName      string          `json:"actionName" valid:"required"`
+	Timestamp       int64           `json:"timestamp" valid:"required"`
+	IP              string          `json:"ip,omitempty" valid:"optional"`
+	Actor           string          `json:"actor" valid:"uuid4WithoutHyphens,required"`
+	ActorType       string          `json:"actorType" valid:"required~actorType values: USER CLIENT"`
+	ClientID        string          `json:"clientId" valid:"uuid4WithoutHyphens,required"`
+	ActorNamespace  string          `json:"actorNamespace" valid:"required"`
+	ObjectID        string          `json:"objectId,omitempty" valid:"optional"`
+	ObjectNamespace string          `json:"objectNamespace" valid:"required~use publisher namespace if resource has no namespace"`
+	TargetUserID    string          `json:"targetUserId,omitempty" valid:"uuid4WithoutHyphens,optional"`
+	DeviceID        string          `json:"deviceId,omitempty" valid:"optional"`
+	Payload         AuditLogPayload `json:"payload" valid:"required"`
+}
+
+type PublishErrorCallbackFunc func(message []byte, err error)
+
+type AuditLogBuilder struct {
+	category        string
+	actionName      string
+	ip              string
+	actor           string
+	actorType       string
+	clientID        string
+	actorNamespace  string
+	objectID        string
+	objectNamespace string
+	targetUserID    string
+	deviceID        string
+	content         map[string]interface{}
+	diff            map[string]interface{}
+
+	key           string
+	errorCallback PublishErrorCallbackFunc
+	ctx           context.Context
+	version       int
+}
+
+// NewAuditLogBuilder create new AuditLogBuilder instance
+func NewAuditLogBuilder() *AuditLogBuilder {
+	return &AuditLogBuilder{
+		version:       defaultVersion,
+		ctx:           context.Background(),
+		errorCallback: nil,
+	}
+}
+
+type AuditLogPayload struct {
+	Content map[string]interface{} `json:"content"`
+	Diff    map[string]interface{} `json:"diff"`
+}
+
+func (auditLogBuilder *AuditLogBuilder) Category(category string) *AuditLogBuilder {
+	auditLogBuilder.category = category
+	return auditLogBuilder
+}
+
+func (auditLogBuilder *AuditLogBuilder) ActionName(actionName string) *AuditLogBuilder {
+	auditLogBuilder.actionName = actionName
+	return auditLogBuilder
+}
+
+func (auditLogBuilder *AuditLogBuilder) IP(ip string) *AuditLogBuilder {
+	auditLogBuilder.ip = ip
+	return auditLogBuilder
+}
+
+func (auditLogBuilder *AuditLogBuilder) Actor(actor string) *AuditLogBuilder {
+	auditLogBuilder.actor = actor
+	return auditLogBuilder
+}
+
+func (auditLogBuilder *AuditLogBuilder) IsActorTypeUser(isActorTypeUser bool) *AuditLogBuilder {
+	if isActorTypeUser {
+		auditLogBuilder.actorType = actorTypeUser
+	} else {
+		auditLogBuilder.actorType = actorTypeClient
+	}
+
+	return auditLogBuilder
+}
+
+func (auditLogBuilder *AuditLogBuilder) ClientID(clientID string) *AuditLogBuilder {
+	auditLogBuilder.clientID = clientID
+	return auditLogBuilder
+}
+
+func (auditLogBuilder *AuditLogBuilder) ActorNamespace(actorNamespace string) *AuditLogBuilder {
+	auditLogBuilder.actorNamespace = actorNamespace
+	return auditLogBuilder
+}
+
+func (auditLogBuilder *AuditLogBuilder) ObjectID(objectID string) *AuditLogBuilder {
+	auditLogBuilder.objectID = objectID
+	return auditLogBuilder
+}
+
+func (auditLogBuilder *AuditLogBuilder) ObjectNamespace(objectNamespace string) *AuditLogBuilder {
+	auditLogBuilder.objectNamespace = objectNamespace
+	return auditLogBuilder
+}
+
+func (auditLogBuilder *AuditLogBuilder) TargetUserID(targetUserID string) *AuditLogBuilder {
+	auditLogBuilder.targetUserID = targetUserID
+	return auditLogBuilder
+}
+
+func (auditLogBuilder *AuditLogBuilder) DeviceID(deviceID string) *AuditLogBuilder {
+	auditLogBuilder.deviceID = deviceID
+	return auditLogBuilder
+}
+
+func (auditLogBuilder *AuditLogBuilder) Content(content map[string]interface{}) *AuditLogBuilder {
+	auditLogBuilder.content = content
+	return auditLogBuilder
+}
+
+func (auditLogBuilder *AuditLogBuilder) Diff(diff map[string]interface{}) *AuditLogBuilder {
+	auditLogBuilder.diff = diff
+	return auditLogBuilder
+}
+
+func (auditLogBuilder *AuditLogBuilder) ErrorCallback(errCallback PublishErrorCallbackFunc) *AuditLogBuilder {
+	auditLogBuilder.errorCallback = errCallback
+	return auditLogBuilder
+}
+
+func (auditLogBuilder *AuditLogBuilder) Key(key string) *AuditLogBuilder {
+	auditLogBuilder.key = key
+	return auditLogBuilder
+}
+
+func (auditLogBuilder *AuditLogBuilder) Build() (kafka.Message, error) {
+
+	id := generateID()
+	auditLog := &AuditLog{
+		ID:              id,
+		Category:        auditLogBuilder.category,
+		ActionName:      auditLogBuilder.actionName,
+		Timestamp:       time.Now().UnixMilli(),
+		IP:              auditLogBuilder.ip,
+		Actor:           auditLogBuilder.actor,
+		ActorType:       auditLogBuilder.actorType,
+		ClientID:        auditLogBuilder.clientID,
+		ActorNamespace:  auditLogBuilder.actorNamespace,
+		ObjectID:        auditLogBuilder.objectID,
+		ObjectNamespace: auditLogBuilder.objectNamespace,
+		TargetUserID:    auditLogBuilder.targetUserID,
+		DeviceID:        auditLogBuilder.deviceID,
+	}
+	var content map[string]interface{}
+	if auditLogBuilder.content == nil {
+		content = make(map[string]interface{})
+	} else {
+		content = auditLogBuilder.content
+	}
+	var diff map[string]interface{}
+	if auditLogBuilder.diff == nil {
+		diff = make(map[string]interface{})
+	} else {
+		diff = auditLogBuilder.diff
+	}
+	payload := AuditLogPayload{
+		Content: content,
+		Diff:    diff,
+	}
+	auditLog.Payload = payload
+
+	auditLogBytes, marshalErr := json.Marshal(auditLog)
+	if marshalErr != nil {
+		logrus.WithField("action", auditLog.ActionName).
+			Errorf("unable to marshal audit log : %v, error: %v", auditLog, marshalErr)
+		return kafka.Message{}, marshalErr
+	}
+	valid, err := validator.ValidateStruct(auditLog)
+	if err != nil {
+		logrus.WithField("action", auditLog.ActionName).
+			Errorf("unable to validate audit log. error : %v", err)
+		return kafka.Message{}, err
+	}
+
+	if !valid {
+		return kafka.Message{}, errInvalidPubStruct
+	}
+
+	return kafka.Message{
+		Key:   []byte(auditLogBuilder.key),
+		Value: auditLogBytes,
+	}, nil
 }
