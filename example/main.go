@@ -106,9 +106,18 @@ func main() {
 				return nil
 			}))
 
+	if err != nil {
+		logrus.Error(err)
+	}
+
 	auditLogContent := make(map[string]interface{})
 	auditLogContent["platformId"] = "steam"
 	auditLogContent["secret"] = "steam_secret"
+	auditLogDiff := eventstream.AuditLogDiff{}
+	auditLogDiff.After = make(map[string]interface{})
+	auditLogDiff.Before = make(map[string]interface{})
+	auditLogDiff.Before["before"] = "before"
+	auditLogDiff.After["after"] = "after"
 	err = client.PublishAuditLog(
 		eventstream.NewAuditLogBuilder().
 			Category("test_category").
@@ -123,6 +132,7 @@ func main() {
 			TargetUserID(strings.Replace(uuid.New().String(), "-", "", -1)).
 			DeviceID("test_device").
 			Content(auditLogContent).
+			Diff(&auditLogDiff).
 			ErrorCallback(func(message []byte, err error) {
 				fmt.Printf("message: %s", string(message))
 			}),

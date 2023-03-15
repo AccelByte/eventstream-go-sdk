@@ -366,7 +366,7 @@ type Client interface {
 }
 
 type AuditLog struct {
-	ID              string          `json:"id" valid:"required"`
+	ID              string          `json:"_id" valid:"required"`
 	Category        string          `json:"category" valid:"required"`
 	ActionName      string          `json:"actionName" valid:"required"`
 	Timestamp       int64           `json:"timestamp" valid:"required"`
@@ -385,19 +385,19 @@ type AuditLog struct {
 type PublishErrorCallbackFunc func(message []byte, err error)
 
 type AuditLogBuilder struct {
-	category        string
-	actionName      string
-	ip              string
-	actor           string
-	actorType       string
-	clientID        string
-	actorNamespace  string
-	objectID        string
-	objectNamespace string
-	targetUserID    string
-	deviceID        string
-	content         map[string]interface{}
-	diff            map[string]interface{}
+	category        string                 `description:"required"`
+	actionName      string                 `description:"required"`
+	ip              string                 `description:"optional"`
+	actor           string                 `description:"uuid4WithoutHyphens,required"`
+	actorType       string                 `description:"required~actorType values: USER CLIENT"`
+	clientID        string                 `description:"uuid4WithoutHyphens,required"`
+	actorNamespace  string                 `description:"required"`
+	objectID        string                 `description:"optional"`
+	objectNamespace string                 `description:"required~use publisher namespace if resource has no namespace"`
+	targetUserID    string                 `description:"uuid4WithoutHyphens,optional"`
+	deviceID        string                 `description:"optional"`
+	content         map[string]interface{} `description:"optional"`
+	diff            *AuditLogDiff          `description:"optional, if diff is not nil, please make sure diff.Before and diff.Before are both not nil"`
 
 	key           string
 	errorCallback PublishErrorCallbackFunc
@@ -416,7 +416,12 @@ func NewAuditLogBuilder() *AuditLogBuilder {
 
 type AuditLogPayload struct {
 	Content map[string]interface{} `json:"content"`
-	Diff    map[string]interface{} `json:"diff"`
+	Diff    AuditLogDiff           `json:"diff"`
+}
+
+type AuditLogDiff struct {
+	Before map[string]interface{} `json:"before,omitempty"`
+	After  map[string]interface{} `json:"after,omitempty"`
 }
 
 func (auditLogBuilder *AuditLogBuilder) Category(category string) *AuditLogBuilder {
@@ -484,7 +489,8 @@ func (auditLogBuilder *AuditLogBuilder) Content(content map[string]interface{}) 
 	return auditLogBuilder
 }
 
-func (auditLogBuilder *AuditLogBuilder) Diff(diff map[string]interface{}) *AuditLogBuilder {
+// Diff If diff is not nil, please make sure diff.Before and diff.Before are both not nil
+func (auditLogBuilder *AuditLogBuilder) Diff(diff *AuditLogDiff) *AuditLogBuilder {
 	auditLogBuilder.diff = diff
 	return auditLogBuilder
 }
@@ -523,11 +529,12 @@ func (auditLogBuilder *AuditLogBuilder) Build() (kafka.Message, error) {
 	} else {
 		content = auditLogBuilder.content
 	}
-	var diff map[string]interface{}
-	if auditLogBuilder.diff == nil {
-		diff = make(map[string]interface{})
-	} else {
-		diff = auditLogBuilder.diff
+	diff := AuditLogDiff{}
+	if auditLogBuilder.diff != nil {
+		if auditLogBuilder.diff.Before == nil || auditLogBuilder.diff.After == nil {
+			return kafka.Message{}, errors.New("diff.Before and diff.After can not be nil")
+		}
+		diff = *auditLogBuilder.diff
 	}
 	payload := AuditLogPayload{
 		Content: content,
@@ -535,21 +542,21 @@ func (auditLogBuilder *AuditLogBuilder) Build() (kafka.Message, error) {
 	}
 	auditLog.Payload = payload
 
-	auditLogBytes, marshalErr := json.Marshal(auditLog)
-	if marshalErr != nil {
-		logrus.WithField("action", auditLog.ActionName).
-			Errorf("unable to marshal audit log : %v, error: %v", auditLog, marshalErr)
-		return kafka.Message{}, marshalErr
-	}
 	valid, err := validator.ValidateStruct(auditLog)
 	if err != nil {
 		logrus.WithField("action", auditLog.ActionName).
 			Errorf("unable to validate audit log. error : %v", err)
 		return kafka.Message{}, err
 	}
-
 	if !valid {
 		return kafka.Message{}, errInvalidPubStruct
+	}
+
+	auditLogBytes, marshalErr := json.Marshal(auditLog)
+	if marshalErr != nil {
+		logrus.WithField("action", auditLog.ActionName).
+			Errorf("unable to marshal audit log : %v, error: %v", auditLog, marshalErr)
+		return kafka.Message{}, marshalErr
 	}
 
 	return kafka.Message{

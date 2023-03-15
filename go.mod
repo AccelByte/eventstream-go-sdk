@@ -3,7 +3,7 @@ module github.com/AccelByte/eventstream-go-sdk/v3
 go 1.17
 
 require (
-	github.com/AccelByte/justice-input-validation-go v0.0.3
+	github.com/AccelByte/justice-input-validation-go v0.0.7
 	github.com/cenkalti/backoff v2.2.1+incompatible
 	github.com/google/uuid v1.1.1
 	github.com/mitchellh/mapstructure v1.1.2
