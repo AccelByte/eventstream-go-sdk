@@ -337,26 +337,28 @@ func (client *KafkaClient) publishAndRetryFailure(context context.Context, topic
 
 	config := client.publishConfig
 	topic = constructTopic(client.prefix, topic)
-	err := backoff.RetryNotify(func() error {
-		return client.publishEvent(context, topic, eventName, config, message)
-	}, backoff.WithMaxRetries(backoff.NewExponentialBackOff(), maxBackOffCount),
-		func(err error, _ time.Duration) {
+
+	go func() {
+		err := backoff.RetryNotify(func() error {
+			return client.publishEvent(context, topic, eventName, config, message)
+		}, backoff.WithMaxRetries(backoff.NewExponentialBackOff(), maxBackOffCount),
+			func(err error, _ time.Duration) {
+				logrus.WithField("topic", topic).
+					Warn("retrying publish message: ", err)
+			})
+		if err != nil {
 			logrus.WithField("topic", topic).
-				Warn("retrying publish message: ", err)
-		})
-	if err != nil {
-		logrus.WithField("topic", topic).
-			Error("retrying publish message failed: ", err)
+				Error("retrying publish message failed: ", err)
 
-		if failureCallback != nil {
-			failureCallback(message.Value, err)
+			if failureCallback != nil {
+				failureCallback(message.Value, err)
+			}
+			return
 		}
+		logrus.WithField("topic", topic).
+			Debug("successfully publish message")
+	}()
 
-		return err
-	}
-
-	logrus.WithField("topic", topic).
-		Debug("successfully publish message")
 	return nil
 }
 
