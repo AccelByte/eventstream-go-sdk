@@ -249,6 +249,7 @@ err := client.PublishAuditLog(eventstream.
             ClientID(ClientID).
             ActorNamespace(ActorNamespace).
             ObjectID(ObjectID).
+	        ObjectType(ObjectType)).
             ObjectNamespace(ObjectNamespace).
             TargetUserID(TargetUserID).
             DeviceID(DeviceID).
@@ -267,6 +268,7 @@ err := client.PublishAuditLog(eventstream.
 * ClientID : OAuth client ID. (string - UUID v4 without Hyphens - Required)
 * ActorNamespace : Actor namespace, should be publisher or studio namespace. (string - alphaNumeric(256) - Required)
 * ObjectID : Target resource id. (string - Optional)
+* ObjectType: Type of Object. (string - Optional)
 * ObjectNamespace : Namespace of target resource. (string - alphaNumeric(256) - Required)
 * TargetUserID : User id related to the resource. (string - UUID v4 without Hyphens - Optional)
 * DeviceID : Device id. (string - Optional)
