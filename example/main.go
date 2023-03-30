@@ -128,6 +128,7 @@ func main() {
 			ClientID(strings.Replace(uuid.New().String(), "-", "", -1)).
 			ActorNamespace("test_namespace").
 			ObjectID(strings.Replace(uuid.New().String(), "-", "", -1)).
+			ObjectType("User").
 			ObjectNamespace("test_object_namespace").
 			TargetUserID(strings.Replace(uuid.New().String(), "-", "", -1)).
 			DeviceID("test_device").

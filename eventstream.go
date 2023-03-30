@@ -376,6 +376,7 @@ type AuditLog struct {
 	ClientID        string          `json:"clientId" valid:"uuid4WithoutHyphens,required"`
 	ActorNamespace  string          `json:"actorNamespace" valid:"required"`
 	ObjectID        string          `json:"objectId,omitempty" valid:"optional"`
+	ObjectType      string          `json:"objectType,omitempty" valid:"optional"`
 	ObjectNamespace string          `json:"objectNamespace" valid:"required~use publisher namespace if resource has no namespace"`
 	TargetUserID    string          `json:"targetUserId,omitempty" valid:"uuid4WithoutHyphens,optional"`
 	DeviceID        string          `json:"deviceId,omitempty" valid:"optional"`
@@ -393,6 +394,7 @@ type AuditLogBuilder struct {
 	clientID        string                 `description:"uuid4WithoutHyphens,required"`
 	actorNamespace  string                 `description:"required"`
 	objectID        string                 `description:"optional"`
+	objectType      string                 `description:"optional"`
 	objectNamespace string                 `description:"required~use publisher namespace if resource has no namespace"`
 	targetUserID    string                 `description:"uuid4WithoutHyphens,optional"`
 	deviceID        string                 `description:"optional"`
@@ -469,6 +471,11 @@ func (auditLogBuilder *AuditLogBuilder) ObjectID(objectID string) *AuditLogBuild
 	return auditLogBuilder
 }
 
+func (auditLogBuilder *AuditLogBuilder) ObjectType(objectType string) *AuditLogBuilder {
+	auditLogBuilder.objectType = objectType
+	return auditLogBuilder
+}
+
 func (auditLogBuilder *AuditLogBuilder) ObjectNamespace(objectNamespace string) *AuditLogBuilder {
 	auditLogBuilder.objectNamespace = objectNamespace
 	return auditLogBuilder
@@ -519,6 +526,7 @@ func (auditLogBuilder *AuditLogBuilder) Build() (kafka.Message, error) {
 		ClientID:        auditLogBuilder.clientID,
 		ActorNamespace:  auditLogBuilder.actorNamespace,
 		ObjectID:        auditLogBuilder.objectID,
+		ObjectType:      auditLogBuilder.objectType,
 		ObjectNamespace: auditLogBuilder.objectNamespace,
 		TargetUserID:    auditLogBuilder.targetUserID,
 		DeviceID:        auditLogBuilder.deviceID,
@@ -531,9 +539,6 @@ func (auditLogBuilder *AuditLogBuilder) Build() (kafka.Message, error) {
 	}
 	diff := AuditLogDiff{}
 	if auditLogBuilder.diff != nil {
-		if auditLogBuilder.diff.Before == nil || auditLogBuilder.diff.After == nil {
-			return kafka.Message{}, errors.New("diff.Before and diff.After can not be nil")
-		}
 		diff = *auditLogBuilder.diff
 	}
 	payload := AuditLogPayload{
