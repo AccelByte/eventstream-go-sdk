@@ -23,6 +23,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strconv"
 	"sync"
 	"time"
 
@@ -39,12 +40,13 @@ const (
 	saslScramAuth     = "SASL-SCRAM"
 
 	auditLogTopicEnvKey  = "APP_EVENT_STREAM_AUDIT_LOG_TOPIC"
+	auditLogEnableEnvKey = "APP_EVENT_STREAM_AUDIT_LOG_ENABLED"
 	auditLogTopicDefault = "auditLog"
 )
 
 var (
-	auditLogTopic = ""
-
+	auditLogTopic  = ""
+	auditEnabled   = true
 	errPubNilEvent = errors.New("unable to publish nil event")
 	errSubNilEvent = errors.New("unable to subscribe nil event")
 )
@@ -128,7 +130,7 @@ func setConfig(writerConfig *kafka.WriterConfig, readerConfig *kafka.ReaderConfi
 func newKafkaClient(brokers []string, prefix string, config ...*BrokerConfig) (*KafkaClient, error) {
 	logrus.Info("create new kafka client")
 
-	loadTopics()
+	loadAuditEnv()
 
 	writerConfig := &kafka.WriterConfig{
 		Brokers: brokers,
@@ -319,16 +321,19 @@ func (client *KafkaClient) publishEvent(ctx context.Context, topic, eventName st
 
 // PublishAuditLog send an audit log message
 func (client *KafkaClient) PublishAuditLog(auditLogBuilder *AuditLogBuilder) error {
-	var topic = auditLogTopicDefault
-	if auditLogTopic != "" {
-		topic = auditLogTopic
-	}
+	if auditEnabled {
+		var topic = auditLogTopicDefault
+		if auditLogTopic != "" {
+			topic = auditLogTopic
+		}
 
-	message, err := auditLogBuilder.Build()
-	if err != nil {
-		return err
+		message, err := auditLogBuilder.Build()
+		if err != nil {
+			return err
+		}
+		return client.publishAndRetryFailure(context.Background(), topic, "", message, auditLogBuilder.errorCallback)
 	}
-	return client.publishAndRetryFailure(context.Background(), topic, "", message, auditLogBuilder.errorCallback)
+	return nil
 }
 
 // publishAndRetryFailure will publish message to kafka, if it fails, will retry at most 3 times.
@@ -689,9 +694,16 @@ func (client *KafkaClient) runCallback(
 	}, nil)
 }
 
-func loadTopics() {
+func loadAuditEnv() {
 	// load audit log topic
 	if auditLogTopicName := loadEnv(auditLogTopicEnvKey); auditLogTopicName != "" {
 		auditLogTopic = auditLogTopicName
+	}
+	if auditEnabledCfgStr := loadEnv(auditLogEnableEnvKey); auditEnabledCfgStr != "" {
+		auditEnabledCfg, err := strconv.ParseBool(auditEnabledCfgStr)
+		if err != nil {
+			logrus.Error("unable to parse env audit env, err: ", err)
+		}
+		auditEnabled = auditEnabledCfg
 	}
 }
