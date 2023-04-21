@@ -236,6 +236,7 @@ Publish to `kafka` stream support with exponential backoff retry. (max 3x)
 
 Environment Variables:
 * APP_EVENT_STREAM_AUDIT_LOG_TOPIC(optional, default: auditLog)
+* APP_EVENT_STREAM_AUDIT_LOG_ENABLED(optional, default true)
 
 To publish an audit log, use this function:
 ```go
