@@ -1,6 +1,6 @@
 module github.com/AccelByte/eventstream-go-sdk/v3
 
-go 1.17
+go 1.18
 
 require (
 	github.com/AccelByte/justice-input-validation-go v0.0.7

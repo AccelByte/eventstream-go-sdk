@@ -25,6 +25,8 @@ import (
 	"time"
 
 	"github.com/mitchellh/mapstructure"
+	"github.com/segmentio/kafka-go"
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -53,6 +55,7 @@ func createKafkaClient(t *testing.T) Client {
 		DialTimeout:      time.Second,
 		ReadTimeout:      time.Second,
 		WriteTimeout:     time.Second,
+		BaseWriterConfig: &kafka.WriterConfig{BatchSize: 5},
 	}
 
 	brokerList := []string{"localhost:9092"}
@@ -89,6 +92,8 @@ func TestKafkaPubSubSuccess(t *testing.T) {
 	ctx, done := context.WithTimeout(context.Background(), time.Duration(timeoutTest)*time.Second)
 	defer done()
 
+	logrus.SetLevel(logrus.DebugLevel)
+
 	doneChan := make(chan bool, 1)
 
 	client := createKafkaClient(t)
@@ -96,14 +101,14 @@ func TestKafkaPubSubSuccess(t *testing.T) {
 	topicName := constructTopicTest()
 
 	var mockPayload = make(map[string]interface{})
-	mockPayload[testPayload] = Payload{FriendID: "user456"}
+	mockPayload[testPayload] = Payload{FriendID: fmt.Sprintf("user-%d", rand.Int63())}
 
 	mockAdditionalFields := map[string]interface{}{
 		"summary": "user:_failed",
 	}
 
 	mockEvent := &Event{
-		EventName:        "testEvent",
+		EventName:        fmt.Sprintf("testEvent-%d", rand.Int63()),
 		Namespace:        "event",
 		ClientID:         "7d480ce0e8624b02901bd80d9ba9817c",
 		TraceID:          "01c34ec3b07f4bfaa59ba0184a3de14d",
@@ -169,31 +174,34 @@ func TestKafkaPubSubSuccess(t *testing.T) {
 			}))
 	require.NoError(t, err)
 
-	err = client.Publish(
-		NewPublish().
-			Topic(topicName).
-			EventName(mockEvent.EventName).
-			Namespace(mockEvent.Namespace).
-			ClientID(mockEvent.ClientID).
-			UserID(mockEvent.UserID).
-			SessionID(mockEvent.SessionID).
-			TraceID(mockEvent.TraceID).
-			SpanContext(mockEvent.SpanContext).
-			Context(context.Background()).
-			EventID(mockEvent.EventID).
-			EventType(mockEvent.EventType).
-			EventLevel(mockEvent.EventLevel).
-			ServiceName(mockEvent.ServiceName).
-			ClientIDs(mockEvent.ClientIDs).
-			TargetUserIDs(mockEvent.TargetUserIDs).
-			TargetNamespace(mockEvent.TargetNamespace).
-			Privacy(mockEvent.Privacy).
-			AdditionalFields(mockEvent.AdditionalFields).
-			Key(testKey).
-			Payload(mockPayload))
-	if err != nil {
-		assert.FailNow(t, errorPublish, err)
-		return
+	for i := 0; i < 20; i++ {
+		err = client.Publish(
+			NewPublish().
+				Topic(topicName).
+				EventName(mockEvent.EventName).
+				Namespace(mockEvent.Namespace).
+				ClientID(mockEvent.ClientID).
+				UserID(mockEvent.UserID).
+				SessionID(mockEvent.SessionID).
+				TraceID(mockEvent.TraceID).
+				SpanContext(mockEvent.SpanContext).
+				Context(context.Background()).
+				EventID(mockEvent.EventID).
+				EventType(mockEvent.EventType).
+				EventLevel(mockEvent.EventLevel).
+				ServiceName(mockEvent.ServiceName).
+				ClientIDs(mockEvent.ClientIDs).
+				TargetUserIDs(mockEvent.TargetUserIDs).
+				TargetNamespace(mockEvent.TargetNamespace).
+				Privacy(mockEvent.Privacy).
+				AdditionalFields(mockEvent.AdditionalFields).
+				Key(mockEvent.Key).
+				Payload(mockPayload))
+		time.Sleep(time.Millisecond * 50)
+		if err != nil {
+			assert.FailNow(t, errorPublish, err)
+			return
+		}
 	}
 
 	select {

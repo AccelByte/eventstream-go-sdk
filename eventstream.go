@@ -90,10 +90,13 @@ type BrokerConfig struct {
 	StrictValidation bool
 	CACertFile       string
 	DialTimeout      time.Duration
-	ReadTimeout      time.Duration
-	WriteTimeout     time.Duration
+	ReadTimeout      time.Duration // deprecated: use baseWriterConfig.ReadTimeout
+	WriteTimeout     time.Duration // deprecated: use baseWriterConfig.WriteTimeout
 	Balancer         kafka.Balancer
 	SecurityConfig   *SecurityConfig
+
+	BaseWriterConfig *kafka.WriterConfig
+	BaseReaderConfig *kafka.ReaderConfig
 }
 
 // SecurityConfig contains security configuration for message broker

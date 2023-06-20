@@ -42,6 +42,8 @@ const (
 	auditLogTopicEnvKey  = "APP_EVENT_STREAM_AUDIT_LOG_TOPIC"
 	auditLogEnableEnvKey = "APP_EVENT_STREAM_AUDIT_LOG_ENABLED"
 	auditLogTopicDefault = "auditLog"
+
+	logWriterStatsInterval = 2 * time.Second
 )
 
 var (
@@ -72,96 +74,123 @@ type KafkaClient struct {
 	// current writers
 	writers map[string]*kafka.Writer
 
+	// last time the writer stats got logged, per namespace
+	writerStatsLastLogged map[string]time.Time
+
 	// mutex to avoid runtime races to access subscribers map
 	subLock sync.RWMutex
 
 	// mutex to avoid runtime races to access writers map
 	pubLock sync.RWMutex
+
+	// mutex to protect writerStatsLastLogged
+	writerStatsLastLoggedLock sync.RWMutex
 }
 
-func setConfig(writerConfig *kafka.WriterConfig, readerConfig *kafka.ReaderConfig, config *BrokerConfig) error {
+// setConfig sets some defaults for producers and consumers. Needed for backwards compatibility.
+func setConfig(configList []*BrokerConfig, brokers []string) (BrokerConfig, error) {
+	// only uses first KafkaConfig arguments
+	hasConfig := len(configList) > 0 && configList[0] != nil
+	var config BrokerConfig
+	if hasConfig {
+		config = *configList[0]
+	}
+	if config.BaseWriterConfig == nil {
+		config.BaseWriterConfig = &kafka.WriterConfig{}
+	}
+	if config.BaseReaderConfig == nil {
+		config.BaseReaderConfig = &kafka.ReaderConfig{}
+	}
+
+	// set config defaults
+	config.BaseWriterConfig.Brokers = brokers
+	config.BaseReaderConfig.Brokers = brokers
+
+	if config.BaseReaderConfig.MaxBytes == 0 {
+		config.BaseReaderConfig.MaxBytes = defaultReaderSize
+	}
+
+	if config.BaseReaderConfig.MaxWait == 0 {
+		config.BaseReaderConfig.MaxWait = kafkaMaxWait
+	}
+
+	if config.BaseReaderConfig.CommitInterval == 0 {
+		config.BaseReaderConfig.CommitInterval = 100 * time.Millisecond // 0 means synchronous commits, we don't support it
+	}
+
+	if logrus.IsLevelEnabled(logrus.DebugLevel) && config.BaseWriterConfig.Logger == nil {
+		config.BaseWriterConfig.Logger = logrus.StandardLogger()
+	}
+
+	if logrus.IsLevelEnabled(logrus.DebugLevel) && config.BaseReaderConfig.Logger == nil {
+		config.BaseReaderConfig.Logger = logrus.StandardLogger()
+	}
+
 	if config.ReadTimeout != 0 {
-		writerConfig.ReadTimeout = config.ReadTimeout
+		config.BaseWriterConfig.ReadTimeout = config.ReadTimeout
 	}
 
 	if config.WriteTimeout != 0 {
-		writerConfig.WriteTimeout = config.WriteTimeout
+		config.BaseWriterConfig.WriteTimeout = config.WriteTimeout
 	}
 
-	dialer := &kafka.Dialer{}
-	if config.DialTimeout != 0 {
-		dialer.Timeout = config.DialTimeout
-	}
-
-	if config.SecurityConfig != nil && config.SecurityConfig.AuthenticationType == saslScramAuth {
-		mechanism, err := scram.Mechanism(scram.SHA512, config.SecurityConfig.SASLUsername, config.SecurityConfig.SASLPassword)
-		if err != nil {
-			logrus.Error("unable to initialize kafka scram authentication", err)
-			return err
-		}
-		dialer.SASLMechanism = mechanism
-		dialer.DualStack = true
-		dialer.TLS = &tls.Config{}
-	}
-
-	if config.CACertFile != "" {
-		logrus.Debug("set TLS certificate")
-
-		cert, err := GetTLSCertFromFile(config.CACertFile)
-		if err != nil {
-			logrus.Error("unable to get TLS certificate", err)
-			return err
+	if hasConfig {
+		dialer := &kafka.Dialer{}
+		if config.DialTimeout != 0 {
+			dialer.Timeout = config.DialTimeout
 		}
 
-		tlsConfig := &tls.Config{
-			Certificates: []tls.Certificate{*cert},
+		if config.SecurityConfig != nil && config.SecurityConfig.AuthenticationType == saslScramAuth {
+			mechanism, err := scram.Mechanism(scram.SHA512, config.SecurityConfig.SASLUsername, config.SecurityConfig.SASLPassword)
+			if err != nil {
+				logrus.Error("unable to initialize kafka scram authentication", err)
+				return config, err
+			}
+			dialer.SASLMechanism = mechanism
+			dialer.DualStack = true
+			dialer.TLS = &tls.Config{}
 		}
 
-		dialer.TLS = tlsConfig
+		if config.CACertFile != "" {
+			logrus.Debug("set TLS certificate")
+
+			cert, err := GetTLSCertFromFile(config.CACertFile)
+			if err != nil {
+				logrus.Error("unable to get TLS certificate", err)
+				return config, err
+			}
+
+			tlsConfig := &tls.Config{
+				Certificates: []tls.Certificate{*cert},
+			}
+
+			dialer.TLS = tlsConfig
+		}
+
+		config.BaseWriterConfig.Dialer = dialer
+		config.BaseReaderConfig.Dialer = dialer
+		config.BaseWriterConfig.Balancer = config.Balancer
 	}
 
-	writerConfig.Dialer = dialer
-	readerConfig.Dialer = dialer
-
-	return nil
+	return config, nil
 }
 
 // newKafkaClient create a new instance of KafkaClient
-func newKafkaClient(brokers []string, prefix string, config ...*BrokerConfig) (*KafkaClient, error) {
+func newKafkaClient(brokers []string, prefix string, configList ...*BrokerConfig) (*KafkaClient, error) {
 	logrus.Info("create new kafka client")
 
 	loadAuditEnv()
 
-	writerConfig := &kafka.WriterConfig{
-		Brokers: brokers,
-	}
-
-	readerConfig := &kafka.ReaderConfig{
-		Brokers:        brokers,
-		MaxBytes:       defaultReaderSize,
-		MaxWait:        kafkaMaxWait,
-		CommitInterval: 100 * time.Millisecond, // 0 means synchronous (slow), > 0 is async.
-	}
-
-	// set client configuration
-	// only uses first KafkaConfig arguments
-	var strictValidation bool
-
-	var err error
-
-	if len(config) > 0 {
-		err = setConfig(writerConfig, readerConfig, config[0])
-		strictValidation = config[0].StrictValidation
-		writerConfig.Balancer = config[0].Balancer
-	}
+	config, err := setConfig(configList, brokers)
 
 	return &KafkaClient{
-		prefix:           prefix,
-		strictValidation: strictValidation,
-		publishConfig:    *writerConfig,
-		subscribeConfig:  *readerConfig,
-		subscribers:      make(map[*SubscribeBuilder]struct{}),
-		writers:          make(map[string]*kafka.Writer),
+		prefix:                prefix,
+		strictValidation:      config.StrictValidation,
+		publishConfig:         *config.BaseWriterConfig,
+		subscribeConfig:       *config.BaseReaderConfig,
+		subscribers:           make(map[*SubscribeBuilder]struct{}),
+		writers:               make(map[string]*kafka.Writer),
+		writerStatsLastLogged: make(map[string]time.Time),
 	}, err
 }
 
@@ -268,23 +297,18 @@ func (client *KafkaClient) publishEvent(ctx context.Context, topic, eventName st
 	message kafka.Message) (err error) {
 	writer := &kafka.Writer{}
 
-	logrus.
+	logFields := logrus.
 		WithField("Topic Name", topic).
-		WithField("Event Name", eventName).
-		Debug("publish event")
+		WithField("Event Name", eventName)
+
+	logFields.Debug("publish event")
 
 	defer func() {
 		if r := recover(); r != nil {
-			logrus.
-				WithField("Topic Name", topic).
-				WithField("Event Name", eventName).
-				Warn("unable to publish event: recover: ", r)
+			logFields.Warn("unable to publish event: recover: ", r)
 
 			if writer == nil {
-				logrus.
-					WithField("Topic Name", topic).
-					WithField("Event Name", eventName).
-					Warn("unable to publish event: writer is nil")
+				logFields.Warn("unable to publish event: writer is nil")
 
 				err = errors.New("writer is nil")
 
@@ -299,7 +323,11 @@ func (client *KafkaClient) publishEvent(ctx context.Context, topic, eventName st
 
 	config.Topic = topic
 	writer = client.getWriter(config)
+	logFields.Debug("[eventstream] start write message")
 	err = writer.WriteMessages(ctx, message)
+	logFields.WithError(err).Debug("[eventstream] done write message")
+
+	client.logWriterStats(config.Topic, logFields, writer)
 
 	if err != nil {
 		if errors.Is(err, io.ErrClosedPipe) {
@@ -584,12 +612,10 @@ func (client *KafkaClient) getWriter(config kafka.WriterConfig) *kafka.Writer {
 		return writer
 	}
 
-	if _, ok := client.writers[config.Topic]; !ok {
-		writer := kafka.NewWriter(config)
-		client.writers[config.Topic] = writer
-	}
+	writer := kafka.NewWriter(config)
+	client.writers[config.Topic] = writer
 
-	return client.writers[config.Topic]
+	return writer
 }
 
 // newWriter new a writer
@@ -705,5 +731,18 @@ func loadAuditEnv() {
 			logrus.Error("unable to parse env audit env, err: ", err)
 		}
 		auditEnabled = auditEnabledCfg
+	}
+}
+
+func (client *KafkaClient) logWriterStats(topicName string, logFields *logrus.Entry, writer *kafka.Writer) {
+	if logrus.IsLevelEnabled(logrus.DebugLevel) && client.writerStatsLastLoggedLock.TryLock() {
+		if last, ok := client.writerStatsLastLogged[topicName]; !ok || time.Since(last) > logWriterStatsInterval {
+			client.writerStatsLastLogged[topicName] = time.Now()
+			client.writerStatsLastLoggedLock.Unlock()
+			stats := writer.Stats()
+			logFields.Debugf("[eventstream] writer stats: %+v", stats)
+		} else {
+			client.writerStatsLastLoggedLock.Unlock()
+		}
 	}
 }
