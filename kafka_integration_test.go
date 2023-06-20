@@ -197,7 +197,7 @@ func TestKafkaPubSubSuccess(t *testing.T) {
 				AdditionalFields(mockEvent.AdditionalFields).
 				Key(mockEvent.Key).
 				Payload(mockPayload))
-		time.Sleep(time.Millisecond * 50)
+		time.Sleep(time.Millisecond * 5)
 		if err != nil {
 			assert.FailNow(t, errorPublish, err)
 			return

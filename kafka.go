@@ -118,14 +118,6 @@ func setConfig(configList []*BrokerConfig, brokers []string) (BrokerConfig, erro
 		config.BaseReaderConfig.CommitInterval = 100 * time.Millisecond // 0 means synchronous commits, we don't support it
 	}
 
-	if logrus.IsLevelEnabled(logrus.DebugLevel) && config.BaseWriterConfig.Logger == nil {
-		config.BaseWriterConfig.Logger = logrus.StandardLogger()
-	}
-
-	if logrus.IsLevelEnabled(logrus.DebugLevel) && config.BaseReaderConfig.Logger == nil {
-		config.BaseReaderConfig.Logger = logrus.StandardLogger()
-	}
-
 	if config.ReadTimeout != 0 {
 		config.BaseWriterConfig.ReadTimeout = config.ReadTimeout
 	}
