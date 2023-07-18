@@ -27,7 +27,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/AccelByte/eventstream-go-sdk/v3/pkg/kafkaprometheus"
 	"github.com/cenkalti/backoff"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/segmentio/kafka-go"
 	"github.com/segmentio/kafka-go/sasl/scram"
 	"github.com/sirupsen/logrus"
@@ -43,7 +45,7 @@ const (
 	auditLogEnableEnvKey = "APP_EVENT_STREAM_AUDIT_LOG_ENABLED"
 	auditLogTopicDefault = "auditLog"
 
-	logWriterStatsInterval = 2 * time.Second
+	logStatsInterval = 2 * time.Second
 )
 
 var (
@@ -77,6 +79,9 @@ type KafkaClient struct {
 	// last time the writer stats got logged, per namespace
 	writerStatsLastLogged map[string]time.Time
 
+	// last time the reader stats got logged, per namespace
+	readerStatsLastLogged map[string]time.Time
+
 	// mutex to avoid runtime races to access subscribers map
 	subLock sync.RWMutex
 
@@ -85,6 +90,11 @@ type KafkaClient struct {
 
 	// mutex to protect writerStatsLastLogged
 	writerStatsLastLoggedLock sync.RWMutex
+
+	// mutex to protect readerStatsLastLogged
+	readerStatsLastLoggedLock sync.RWMutex
+
+	metricsRegistry *prometheus.Registry
 }
 
 // setConfig sets some defaults for producers and consumers. Needed for backwards compatibility.
@@ -183,6 +193,8 @@ func newKafkaClient(brokers []string, prefix string, configList ...*BrokerConfig
 		subscribers:           make(map[*SubscribeBuilder]struct{}),
 		writers:               make(map[string]*kafka.Writer),
 		writerStatsLastLogged: make(map[string]time.Time),
+		readerStatsLastLogged: make(map[string]time.Time),
+		metricsRegistry:       config.MetricsRegistry,
 	}, err
 }
 
@@ -513,6 +525,13 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 		defer client.unregister(subscribeBuilder)
 		defer reader.Close() // nolint: errcheck
 
+		if client.metricsRegistry != nil {
+			err = client.metricsRegistry.Register(&kafkaprometheus.ReaderCollector{Reader: reader})
+			if err != nil {
+				loggerFields.Warnf("failed to register kafka metrics on subscriber: %v", err)
+			}
+		}
+
 		for {
 			select {
 			case <-subscribeBuilder.ctx.Done():
@@ -530,7 +549,11 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 			default:
 				consumerMessage, errRead := reader.FetchMessage(subscribeBuilder.ctx)
 				if errRead != nil {
-					loggerFields.Error("subscriber unable to fetch message", errRead)
+					if errRead == context.Canceled {
+						loggerFields.Infof("subscriber shut down because context cancelled")
+					} else {
+						loggerFields.Errorf("subscriber unable to fetch message : %v", errRead)
+					}
 
 					if errClose := reader.Close(); errClose != nil {
 						logrus.Error("unable to close subscriber", err)
@@ -548,6 +571,7 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 				}
 
 				err := client.processMessage(subscribeBuilder, consumerMessage, topic)
+				client.logReaderStats(subscribeBuilder.topic, reader)
 				if err != nil {
 					loggerFields.Error("unable to process the event: ", err)
 
@@ -606,6 +630,14 @@ func (client *KafkaClient) getWriter(config kafka.WriterConfig) *kafka.Writer {
 
 	writer := kafka.NewWriter(config)
 	client.writers[config.Topic] = writer
+
+	// We register at most 1 metric collector per topic
+	if client.metricsRegistry != nil {
+		err := client.metricsRegistry.Register(&kafkaprometheus.WriterCollector{Writer: writer})
+		if err != nil {
+			logrus.Warnf("failed to register kafka metrics on publisher, topic %v: %v", config.Topic, err)
+		}
+	}
 
 	return writer
 }
@@ -728,13 +760,26 @@ func loadAuditEnv() {
 
 func (client *KafkaClient) logWriterStats(topicName string, logFields *logrus.Entry, writer *kafka.Writer) {
 	if logrus.IsLevelEnabled(logrus.DebugLevel) && client.writerStatsLastLoggedLock.TryLock() {
-		if last, ok := client.writerStatsLastLogged[topicName]; !ok || time.Since(last) > logWriterStatsInterval {
+		if last, ok := client.writerStatsLastLogged[topicName]; !ok || time.Since(last) > logStatsInterval {
 			client.writerStatsLastLogged[topicName] = time.Now()
 			client.writerStatsLastLoggedLock.Unlock()
 			stats := writer.Stats()
-			logFields.Debugf("[eventstream] writer stats: %+v", stats)
+			logFields.Debugf("[eventstream] Writer stats: %+v", stats)
 		} else {
 			client.writerStatsLastLoggedLock.Unlock()
+		}
+	}
+}
+
+func (client *KafkaClient) logReaderStats(topicName string, reader *kafka.Reader) {
+	if logrus.IsLevelEnabled(logrus.DebugLevel) && client.readerStatsLastLoggedLock.TryLock() {
+		if last, ok := client.readerStatsLastLogged[topicName]; !ok || time.Since(last) > logStatsInterval {
+			client.readerStatsLastLogged[topicName] = time.Now()
+			client.readerStatsLastLoggedLock.Unlock()
+			stats := reader.Stats()
+			logrus.WithField("topic", topicName).Debugf("[eventstream] Reader stats: %+v", stats)
+		} else {
+			client.readerStatsLastLoggedLock.Unlock()
 		}
 	}
 }

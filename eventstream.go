@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"errors"
 	validator "github.com/AccelByte/justice-input-validation-go"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
 	"time"
 
@@ -97,6 +98,8 @@ type BrokerConfig struct {
 
 	BaseWriterConfig *kafka.WriterConfig
 	BaseReaderConfig *kafka.ReaderConfig
+
+	MetricsRegistry *prometheus.Registry // optional registry to report metrics to prometheus (used for kafka stats)
 }
 
 // SecurityConfig contains security configuration for message broker
