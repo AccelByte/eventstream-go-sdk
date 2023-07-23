@@ -20,12 +20,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	validator "github.com/AccelByte/justice-input-validation-go"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/sirupsen/logrus"
+	"fmt"
 	"time"
 
+	"github.com/AccelByte/eventstream-go-sdk/v3/pkg/kafkaprometheus"
+	validator "github.com/AccelByte/justice-input-validation-go"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/segmentio/kafka-go"
+	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -38,7 +40,7 @@ const (
 )
 
 const (
-	separator      = "."
+	separator      = "." // topic prefix separator
 	defaultVersion = 1
 )
 
@@ -348,6 +350,11 @@ func (s *SubscribeBuilder) CallbackRaw(
 func (s *SubscribeBuilder) Context(ctx context.Context) *SubscribeBuilder {
 	s.ctx = ctx
 	return s
+}
+
+// Slug is a string describing a unique subscriber (topic, eventName, groupID)
+func (s *SubscribeBuilder) Slug() string {
+	return fmt.Sprintf("%s%s%s%s%s", s.topic, kafkaprometheus.SlugSeparator, s.eventName, kafkaprometheus.SlugSeparator, s.groupID)
 }
 
 func NewClient(prefix, stream string, brokers []string, config ...*BrokerConfig) (Client, error) {

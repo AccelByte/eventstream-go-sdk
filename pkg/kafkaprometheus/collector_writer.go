@@ -1,13 +1,28 @@
+/*
+* Copyright 2023 AccelByte Inc
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+* http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+ */
+
 package kafkaprometheus
 
 import (
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/segmentio/kafka-go"
 )
 
 // WriterCollector implements prometheus' Collector interface, for kafka writer.
 type WriterCollector struct {
-	Writer *kafka.Writer
+	Client KafkaStatCollector
 }
 
 var (
@@ -23,37 +38,32 @@ var (
 	writerWaitTime          = prometheus.NewSummaryVec(prometheus.SummaryOpts{Name: writerPrefix + "wait_seconds", Help: "Summary of wait time before write operations by the Kafka writer."}, writerLabels)
 	writerBatchSizeSummary  = prometheus.NewSummaryVec(prometheus.SummaryOpts{Name: writerPrefix + "batch_size_summary", Help: "Summary of batch sizes used by the Kafka writer."}, writerLabels)
 	writerBatchBytesSummary = prometheus.NewSummaryVec(prometheus.SummaryOpts{Name: writerPrefix + "batch_bytes_summary", Help: "Summary of bytes written per batch by the Kafka writer."}, writerLabels)
-	writerMaxAttempts       = prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: writerPrefix + "attempts_max", Help: "Maximum number of attempts allowed by the Kafka writer."}, writerLabels)
-	writerMaxBatchSize      = prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: writerPrefix + "batch_max", Help: "Maximum batch size allowed by the Kafka writer."}, writerLabels)
-	writerBatchTimeout      = prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: writerPrefix + "batch_timeout", Help: "Timeout for batch operations by the Kafka writer."}, writerLabels)
-	writerReadTimeout       = prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: writerPrefix + "read_timeout", Help: "Timeout for read operations by the Kafka writer."}, writerLabels)
-	writerWriteTimeout      = prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: writerPrefix + "write_timeout", Help: "Timeout for write operations by the Kafka writer."}, writerLabels)
 )
 
 func (w *WriterCollector) Collect(metrics chan<- prometheus.Metric) {
-	stats := w.Writer.Stats()
-	topic := stats.Topic
-	metrics <- counter(writerWrites, float64(stats.Writes), topic)
-	metrics <- counter(writerMessages, float64(stats.Messages), topic)
-	metrics <- counter(writerBytes, float64(stats.Bytes), topic)
-	metrics <- counter(writerErrors, float64(stats.Errors), topic)
-	metrics <- counter(writerRetries, float64(stats.Retries), topic)
+	// First collect the stats for all topic writers
+	stats, topics := w.Client.GetWriterStats()
 
-	// Collect DurationStats as prometheus.NewConstSummary summaries
-	metrics <- summaryDuration(writerBatchTime, stats.BatchTime, topic)
-	metrics <- summaryDuration(writerBatchQueueTime, stats.BatchQueueTime, topic)
-	metrics <- summaryDuration(writerWriteTime, stats.WriteTime, topic)
-	metrics <- summaryDuration(writerWaitTime, stats.WaitTime, topic)
+	// Then send those stats to Prometheus
+	for i, topic := range topics {
+		s := stats[i]
+		/*if s.Writes == 0 && s.Messages == 0 && s.Bytes == 0 && s.Errors == 0 && s.Retries == 0 {
+			continue
+		}*/
 
-	// Collect SummaryStats as prometheus.NewConstSummary summaries
-	metrics <- summaryCount(writerBatchSizeSummary, stats.BatchSize, topic)
-	metrics <- summaryCount(writerBatchBytesSummary, stats.BatchBytes, topic)
+		metrics <- counter(writerWrites, s.Writes, topic)
+		metrics <- counter(writerMessages, s.Messages, topic)
+		metrics <- counter(writerBytes, s.Bytes, topic)
+		metrics <- counter(writerErrors, s.Errors, topic)
+		metrics <- counter(writerRetries, s.Retries, topic)
 
-	metrics <- gauge(writerMaxAttempts, float64(stats.MaxAttempts), topic)
-	metrics <- gauge(writerMaxBatchSize, float64(stats.MaxBatchSize), topic)
-	metrics <- gauge(writerBatchTimeout, stats.BatchTimeout.Seconds(), topic)
-	metrics <- gauge(writerReadTimeout, stats.ReadTimeout.Seconds(), topic)
-	metrics <- gauge(writerWriteTimeout, stats.WriteTimeout.Seconds(), topic)
+		metrics <- summaryDuration(writerBatchTime, s.BatchTime, topic)
+		metrics <- summaryDuration(writerBatchQueueTime, s.BatchQueueTime, topic)
+		metrics <- summaryDuration(writerWriteTime, s.WriteTime, topic)
+		metrics <- summaryDuration(writerWaitTime, s.WaitTime, topic)
+		metrics <- summaryCount(writerBatchSizeSummary, s.BatchSize, topic)
+		metrics <- summaryCount(writerBatchBytesSummary, s.BatchBytes, topic)
+	}
 }
 
 func (w *WriterCollector) Describe(c chan<- *prometheus.Desc) {
@@ -68,9 +78,4 @@ func (w *WriterCollector) Describe(c chan<- *prometheus.Desc) {
 	writerWaitTime.Describe(c)
 	writerBatchSizeSummary.Describe(c)
 	writerBatchBytesSummary.Describe(c)
-	writerMaxAttempts.Describe(c)
-	writerMaxBatchSize.Describe(c)
-	writerBatchTimeout.Describe(c)
-	writerReadTimeout.Describe(c)
-	writerWriteTimeout.Describe(c)
 }

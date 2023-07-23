@@ -29,7 +29,6 @@ import (
 
 	"github.com/AccelByte/eventstream-go-sdk/v3/pkg/kafkaprometheus"
 	"github.com/cenkalti/backoff"
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/segmentio/kafka-go"
 	"github.com/segmentio/kafka-go/sasl/scram"
 	"github.com/sirupsen/logrus"
@@ -37,15 +36,13 @@ import (
 
 const (
 	defaultReaderSize = 10e6 // 10MB
-	maxBackOffCount   = 3
+	maxBackOffCount   = 4
 	kafkaMaxWait      = time.Second
 	saslScramAuth     = "SASL-SCRAM"
 
 	auditLogTopicEnvKey  = "APP_EVENT_STREAM_AUDIT_LOG_TOPIC"
 	auditLogEnableEnvKey = "APP_EVENT_STREAM_AUDIT_LOG_ENABLED"
 	auditLogTopicDefault = "auditLog"
-
-	logStatsInterval = 2 * time.Second
 )
 
 var (
@@ -71,30 +68,16 @@ type KafkaClient struct {
 	subscribeConfig kafka.ReaderConfig
 
 	// current subscribers
-	subscribers map[*SubscribeBuilder]struct{}
+	readers map[string]*kafka.Reader
 
 	// current writers
 	writers map[string]*kafka.Writer
 
-	// last time the writer stats got logged, per namespace
-	writerStatsLastLogged map[string]time.Time
-
-	// last time the reader stats got logged, per namespace
-	readerStatsLastLogged map[string]time.Time
-
 	// mutex to avoid runtime races to access subscribers map
-	subLock sync.RWMutex
+	ReadersLock sync.RWMutex
 
 	// mutex to avoid runtime races to access writers map
-	pubLock sync.RWMutex
-
-	// mutex to protect writerStatsLastLogged
-	writerStatsLastLoggedLock sync.RWMutex
-
-	// mutex to protect readerStatsLastLogged
-	readerStatsLastLoggedLock sync.RWMutex
-
-	metricsRegistry *prometheus.Registry
+	WritersLock sync.RWMutex
 }
 
 // setConfig sets some defaults for producers and consumers. Needed for backwards compatibility.
@@ -185,17 +168,25 @@ func newKafkaClient(brokers []string, prefix string, configList ...*BrokerConfig
 
 	config, err := setConfig(configList, brokers)
 
-	return &KafkaClient{
-		prefix:                prefix,
-		strictValidation:      config.StrictValidation,
-		publishConfig:         *config.BaseWriterConfig,
-		subscribeConfig:       *config.BaseReaderConfig,
-		subscribers:           make(map[*SubscribeBuilder]struct{}),
-		writers:               make(map[string]*kafka.Writer),
-		writerStatsLastLogged: make(map[string]time.Time),
-		readerStatsLastLogged: make(map[string]time.Time),
-		metricsRegistry:       config.MetricsRegistry,
-	}, err
+	client := &KafkaClient{
+		prefix:           prefix,
+		strictValidation: config.StrictValidation,
+		publishConfig:    *config.BaseWriterConfig,
+		subscribeConfig:  *config.BaseReaderConfig,
+		readers:          make(map[string]*kafka.Reader),
+		writers:          make(map[string]*kafka.Writer),
+	}
+	if config.MetricsRegistry != nil {
+		err = config.MetricsRegistry.Register(&kafkaprometheus.WriterCollector{Client: client})
+		if err != nil {
+			logrus.Errorf("failed to register kafka writers metrics: %v", err)
+		}
+		err = config.MetricsRegistry.Register(&kafkaprometheus.ReaderCollector{Client: client})
+		if err != nil {
+			logrus.Errorf("failed to register kafka Readers metrics: %v", err)
+		}
+	}
+	return client, err
 }
 
 // Publish send event to single or multiple topic with exponential backoff retry
@@ -225,17 +216,23 @@ func (client *KafkaClient) Publish(publishBuilder *PublishBuilder) error {
 
 	config := client.publishConfig
 
+	if len(publishBuilder.topic) > 1 {
+		// TODO, change Topic() api to only allow 1 topic so we can simplify this logic. It will be a breaking change.
+		logrus.Warnf("eventstream got more than 1 topic per publish: %+v", publishBuilder.topic)
+	}
+
 	for _, pubTopic := range publishBuilder.topic {
 		topic := constructTopic(client.prefix, pubTopic)
 
-		go func() {
+		go func(topic string) {
 			err = backoff.RetryNotify(func() error {
 				return client.publishEvent(publishBuilder.ctx, topic, publishBuilder.eventName, config, message)
 			}, backoff.WithMaxRetries(backoff.NewExponentialBackOff(), maxBackOffCount),
-				func(err error, _ time.Duration) {
+				func(err error, d time.Duration) {
 					logrus.
 						WithField("Topic Name", topic).
 						WithField("Event Name", publishBuilder.eventName).
+						WithField("duration", d).
 						Warn("retrying publish event: ", err)
 				})
 			if err != nil {
@@ -255,7 +252,7 @@ func (client *KafkaClient) Publish(publishBuilder *PublishBuilder) error {
 				WithField("Topic Name", topic).
 				WithField("Event Name", publishBuilder.eventName).
 				Debug("successfully publish event")
-		}()
+		}(topic)
 	}
 
 	return nil
@@ -327,12 +324,7 @@ func (client *KafkaClient) publishEvent(ctx context.Context, topic, eventName st
 
 	config.Topic = topic
 	writer = client.getWriter(config)
-	logFields.Debug("[eventstream] start write message")
 	err = writer.WriteMessages(ctx, message)
-	logFields.WithError(err).Debug("[eventstream] done write message")
-
-	client.logWriterStats(config.Topic, logFields, writer)
-
 	if err != nil {
 		if errors.Is(err, io.ErrClosedPipe) {
 			// new a writer and retry
@@ -443,10 +435,9 @@ func ConstructEvent(publishBuilder *PublishBuilder) (kafka.Message, *Event, erro
 
 // unregister unregister subscriber
 func (client *KafkaClient) unregister(subscribeBuilder *SubscribeBuilder) {
-	client.subLock.Lock()
-	defer client.subLock.Unlock()
-
-	delete(client.subscribers, subscribeBuilder)
+	client.ReadersLock.Lock()
+	defer client.ReadersLock.Unlock()
+	delete(client.readers, subscribeBuilder.Slug())
 }
 
 // Register register callback function and then subscribe topic
@@ -479,13 +470,7 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 		WithField("Topic Name", topic).
 		WithField("Event Name", subscribeBuilder.eventName)
 
-	isRegistered, err := client.registerSubscriber(subscribeBuilder)
-	if err != nil {
-		loggerFields.Error("unable to register callback: ", err)
-
-		return err
-	}
-
+	isRegistered := client.registerSubscriber(subscribeBuilder)
 	if isRegistered {
 		return fmt.Errorf(
 			"topic and event already registered. topic: %s , event: %s",
@@ -500,6 +485,7 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 		config.GroupID = groupID
 		config.StartOffset = subscribeBuilder.offset
 		reader := kafka.NewReader(config)
+		client.setSubscriberReader(subscribeBuilder, reader)
 
 		var eventProcessingFailed bool
 
@@ -524,13 +510,6 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 		}()
 		defer client.unregister(subscribeBuilder)
 		defer reader.Close() // nolint: errcheck
-
-		if client.metricsRegistry != nil {
-			err = client.metricsRegistry.Register(&kafkaprometheus.ReaderCollector{Reader: reader})
-			if err != nil {
-				loggerFields.Warnf("failed to register kafka metrics on subscriber: %v", err)
-			}
-		}
 
 		for {
 			select {
@@ -562,16 +541,17 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 					if subscribeBuilder.ctx.Err() != nil {
 						// the subscription is shutting down. triggered by an external context cancellation
 						loggerFields.Warn("triggered an external context cancellation. Cancelling the subscription")
-						reader = kafka.NewReader(config)
+						reader = kafka.NewReader(config) // TODO : why do we create a new reader before shutting down? Remove this.
+						client.setSubscriberReader(subscribeBuilder, reader)
 						continue
 					}
 
 					reader = kafka.NewReader(config)
+					client.setSubscriberReader(subscribeBuilder, reader)
 					continue
 				}
 
 				err := client.processMessage(subscribeBuilder, consumerMessage, topic)
-				client.logReaderStats(subscribeBuilder.topic, reader)
 				if err != nil {
 					loggerFields.Error("unable to process the event: ", err)
 
@@ -601,28 +581,37 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 // registerSubscriber add callback to map with topic and eventName as a key
 func (client *KafkaClient) registerSubscriber(subscribeBuilder *SubscribeBuilder) (
 	isRegistered bool,
-	err error,
 ) {
-	client.subLock.Lock()
-	defer client.subLock.Unlock()
+	slug := subscribeBuilder.Slug() // slug contains the topic, eventName and groupID.
 
-	for subs := range client.subscribers {
-		if subs.topic == subscribeBuilder.topic && subs.eventName == subscribeBuilder.eventName {
-			if subscribeBuilder.groupID == "" {
-				return true, nil
-			}
+	client.ReadersLock.Lock()
+	defer client.ReadersLock.Unlock()
+	if _, exists := client.readers[slug]; exists {
+		if subscribeBuilder.groupID == "" {
+			return true
+		} else {
+			// Note: for backwards compatibility we allow multiple subscribers to the same event per pod,
+			// but beside tests there's no good reason to do that.
+			logrus.Warnf("multiple subscribers for %+v", subscribeBuilder)
 		}
 	}
 
-	client.subscribers[subscribeBuilder] = struct{}{}
+	client.readers[slug] = nil //  It's registered. Later we set the actual value to the kafka.Writer.
 
-	return false, nil
+	return false
+}
+
+func (client *KafkaClient) setSubscriberReader(subscribeBuilder *SubscribeBuilder, reader *kafka.Reader) {
+	slug := subscribeBuilder.Slug()
+	client.ReadersLock.Lock()
+	defer client.ReadersLock.Unlock()
+	client.readers[slug] = reader
 }
 
 // getWriter get a writer based on config
 func (client *KafkaClient) getWriter(config kafka.WriterConfig) *kafka.Writer {
-	client.pubLock.Lock()
-	defer client.pubLock.Unlock()
+	client.WritersLock.Lock()
+	defer client.WritersLock.Unlock()
 
 	if writer, ok := client.writers[config.Topic]; ok {
 		return writer
@@ -631,24 +620,15 @@ func (client *KafkaClient) getWriter(config kafka.WriterConfig) *kafka.Writer {
 	writer := kafka.NewWriter(config)
 	client.writers[config.Topic] = writer
 
-	// We register at most 1 metric collector per topic
-	if client.metricsRegistry != nil {
-		err := client.metricsRegistry.Register(&kafkaprometheus.WriterCollector{Writer: writer})
-		if err != nil {
-			logrus.Warnf("failed to register kafka metrics on publisher, topic %v: %v", config.Topic, err)
-		}
-	}
-
 	return writer
 }
 
 // newWriter new a writer
 func (client *KafkaClient) newWriter(config kafka.WriterConfig) *kafka.Writer {
-	client.pubLock.Lock()
-	defer client.pubLock.Unlock()
-
-	// let's always new a writer
 	writer := kafka.NewWriter(config)
+
+	client.WritersLock.Lock()
+	defer client.WritersLock.Unlock()
 	client.writers[config.Topic] = writer
 
 	return writer
@@ -656,8 +636,8 @@ func (client *KafkaClient) newWriter(config kafka.WriterConfig) *kafka.Writer {
 
 // deleteWriter delete writer
 func (client *KafkaClient) deleteWriter(topic string) {
-	client.pubLock.Lock()
-	defer client.pubLock.Unlock()
+	client.WritersLock.Lock()
+	defer client.WritersLock.Unlock()
 
 	writer, ok := client.writers[topic]
 	if ok {
@@ -758,28 +738,36 @@ func loadAuditEnv() {
 	}
 }
 
-func (client *KafkaClient) logWriterStats(topicName string, logFields *logrus.Entry, writer *kafka.Writer) {
-	if logrus.IsLevelEnabled(logrus.DebugLevel) && client.writerStatsLastLoggedLock.TryLock() {
-		if last, ok := client.writerStatsLastLogged[topicName]; !ok || time.Since(last) > logStatsInterval {
-			client.writerStatsLastLogged[topicName] = time.Now()
-			client.writerStatsLastLoggedLock.Unlock()
-			stats := writer.Stats()
-			logFields.Debugf("[eventstream] Writer stats: %+v", stats)
-		} else {
-			client.writerStatsLastLoggedLock.Unlock()
+// GetWriterStats per topic
+func (client *KafkaClient) GetWriterStats() (stats []kafka.WriterStats, topics []string) {
+	client.WritersLock.RLock()
+	defer client.WritersLock.RUnlock()
+
+	stats = make([]kafka.WriterStats, 0, len(client.writers))
+	topics = make([]string, 0, len(client.writers))
+	for _, writer := range client.writers {
+		if writer == nil {
+			continue
 		}
+		topics = append(topics, writer.Topic)
+		stats = append(stats, writer.Stats())
 	}
+	return stats, topics
 }
 
-func (client *KafkaClient) logReaderStats(topicName string, reader *kafka.Reader) {
-	if logrus.IsLevelEnabled(logrus.DebugLevel) && client.readerStatsLastLoggedLock.TryLock() {
-		if last, ok := client.readerStatsLastLogged[topicName]; !ok || time.Since(last) > logStatsInterval {
-			client.readerStatsLastLogged[topicName] = time.Now()
-			client.readerStatsLastLoggedLock.Unlock()
-			stats := reader.Stats()
-			logrus.WithField("topic", topicName).Debugf("[eventstream] Reader stats: %+v", stats)
-		} else {
-			client.readerStatsLastLoggedLock.Unlock()
+// GetReaderStats returns stats for each subscriber, and its topic, eventName and groupID.
+func (client *KafkaClient) GetReaderStats() (stats []kafka.ReaderStats, slugs []string) {
+	client.ReadersLock.RLock()
+	defer client.ReadersLock.RUnlock()
+
+	stats = make([]kafka.ReaderStats, 0, len(client.readers))
+	slugs = make([]string, 0, len(client.readers))
+	for slug, reader := range client.readers {
+		if reader == nil {
+			continue
 		}
+		slugs = append(slugs, slug)
+		stats = append(stats, reader.Stats())
 	}
+	return stats, slugs
 }
