@@ -227,12 +227,12 @@ func (client *KafkaClient) Publish(publishBuilder *PublishBuilder) error {
 		go func(topic string) {
 			err = backoff.RetryNotify(func() error {
 				return client.publishEvent(publishBuilder.ctx, topic, publishBuilder.eventName, config, message)
-			}, backoff.WithMaxRetries(backoff.NewExponentialBackOff(), maxBackOffCount),
+			}, backoff.WithMaxRetries(newPublishBackoff(), maxBackOffCount),
 				func(err error, d time.Duration) {
 					logrus.
 						WithField("Topic Name", topic).
 						WithField("Event Name", publishBuilder.eventName).
-						WithField("duration", d).
+						WithField("backoff-duration", d).
 						Warn("retrying publish event: ", err)
 				})
 			if err != nil {
@@ -370,7 +370,7 @@ func (client *KafkaClient) publishAndRetryFailure(context context.Context, topic
 	go func() {
 		err := backoff.RetryNotify(func() error {
 			return client.publishEvent(context, topic, eventName, config, message)
-		}, backoff.WithMaxRetries(backoff.NewExponentialBackOff(), maxBackOffCount),
+		}, backoff.WithMaxRetries(newPublishBackoff(), maxBackOffCount),
 			func(err error, _ time.Duration) {
 				logrus.WithField("topic", topic).
 					Warn("retrying publish message: ", err)
@@ -490,6 +490,10 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 		var eventProcessingFailed bool
 
 		defer func() {
+
+			reader.Close() // nolint: errcheck
+			client.unregister(subscribeBuilder)
+
 			if eventProcessingFailed {
 				if subscribeBuilder.ctx.Err() != nil {
 					// the subscription is shutting down. triggered by an external context cancellation
@@ -508,8 +512,6 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 				}
 			}
 		}()
-		defer client.unregister(subscribeBuilder)
-		defer reader.Close() // nolint: errcheck
 
 		for {
 			select {
@@ -531,23 +533,20 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 					if errRead == context.Canceled {
 						loggerFields.Infof("subscriber shut down because context cancelled")
 					} else {
-						loggerFields.Errorf("subscriber unable to fetch message : %v", errRead)
-					}
-
-					if errClose := reader.Close(); errClose != nil {
-						logrus.Error("unable to close subscriber", err)
+						loggerFields.Errorf("subscriber unable to fetch message: %v", errRead)
 					}
 
 					if subscribeBuilder.ctx.Err() != nil {
 						// the subscription is shutting down. triggered by an external context cancellation
 						loggerFields.Warn("triggered an external context cancellation. Cancelling the subscription")
-						reader = kafka.NewReader(config) // TODO : why do we create a new reader before shutting down? Remove this.
-						client.setSubscriberReader(subscribeBuilder, reader)
-						continue
+						continue // Shutting down because ctx expired
 					}
 
-					reader = kafka.NewReader(config)
-					client.setSubscriberReader(subscribeBuilder, reader)
+					// On read error we just retry (after slight delay).
+					// Typical errors from the cluster include: consumer group is rebalancing, or leader re-election.
+					// Those aren't hard errors so we should just call FetchMessage again.
+					// It can also return IO errors like EOF, but not that reader automatically handles reconnecting to the cluster.
+					time.Sleep(200 * time.Millisecond)
 					continue
 				}
 
@@ -770,4 +769,13 @@ func (client *KafkaClient) GetReaderStats() (stats []kafka.ReaderStats, slugs []
 		stats = append(stats, reader.Stats())
 	}
 	return stats, slugs
+}
+
+func newPublishBackoff() *backoff.ExponentialBackOff {
+	backoff := backoff.NewExponentialBackOff()
+	// We increase the default multiplier, because kafka cluster operations can take quite long to complete,
+	// e.g. auto-creating topics, leader re-election, or rebalancing.
+	// For maxBackoffCount=4 we will get attempts: 0ms, 500ms, 2s, 8s, 16s.
+	backoff.Multiplier = 4.0
+	return backoff
 }

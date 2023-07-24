@@ -27,7 +27,7 @@ type ReaderCollector struct {
 }
 
 var (
-	labels              = []string{"topic", "partition"}
+	labels              = []string{"topic", "event"}
 	readerDials         = prometheus.NewCounterVec(prometheus.CounterOpts{Name: readerPrefix + "dials", Help: "Total number of dial attempts made by the reader."}, labels)
 	readerFetches       = prometheus.NewCounterVec(prometheus.CounterOpts{Name: readerPrefix + "fetches", Help: "Total number of fetch attempts made by the reader."}, labels)
 	readerMessages      = prometheus.NewCounterVec(prometheus.CounterOpts{Name: readerPrefix + "messages", Help: "Total number of messages read by the reader."}, labels)
