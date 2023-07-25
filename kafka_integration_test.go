@@ -20,7 +20,9 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"path"
 	"reflect"
+	"runtime"
 	"testing"
 	"time"
 
@@ -39,7 +41,6 @@ const (
 	errorTimeout   = "timeout while executing test"
 	errorPublish   = "error when publish event"
 	errorSubscribe = "error when subscribe event"
-	preCreateTopic = "testTopic"
 )
 
 type Payload struct {
@@ -52,9 +53,9 @@ func createKafkaClient(t *testing.T) Client {
 	config := &BrokerConfig{
 		CACertFile:       "",
 		StrictValidation: true,
-		DialTimeout:      time.Second,
-		ReadTimeout:      time.Second,
-		WriteTimeout:     time.Second,
+		DialTimeout:      2 * time.Second,
+		ReadTimeout:      2 * time.Second,
+		WriteTimeout:     2 * time.Second,
 		BaseWriterConfig: &kafka.WriterConfig{BatchSize: 5},
 	}
 
@@ -83,7 +84,7 @@ func createInvalidKafkaClient(t *testing.T) Client {
 
 func constructTopicTest() string {
 	rand.Seed(time.Now().UnixNano())
-	return fmt.Sprintf("%s.%s", "testTopic", generateID()) // nolint:gomnd
+	return fmt.Sprintf("%s.%s.%s", "testTopic", callerFuncName(), generateID()) // nolint:gomnd
 }
 
 // nolint dupl
@@ -1235,4 +1236,14 @@ func TestKafkaUnregisterTopicSuccess(t *testing.T) {
 			assert.FailNow(t, errorTimeout)
 		}
 	}
+}
+
+func callerFuncName() string {
+	pc, _, _, _ := runtime.Caller(2)
+	callerFunc := runtime.FuncForPC(pc)
+	if callerFunc != nil {
+		fullName := callerFunc.Name()
+		return path.Base(fullName)
+	}
+	return "UnknownFunction"
 }

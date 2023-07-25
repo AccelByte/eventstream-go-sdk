@@ -23,6 +23,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/segmentio/kafka-go"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -35,11 +36,11 @@ func TestMultipleSubscriptionsEventuallyProcessAllEvents(t *testing.T) {
 	ctx, done := context.WithTimeout(context.Background(), testTimeoutDuration)
 	defer done()
 
-	doneChan := make(chan bool, 200) // nolint:gomnd
+	doneChan := make(chan bool, 100) // nolint:gomnd
 
 	client := createKafkaClient(t)
 
-	topicName := preCreateTopic
+	topicName := constructTopicTest()
 
 	var mockPayload = make(map[string]interface{})
 	mockPayload[testPayload] = "testPayload" // nolint:goconst
@@ -79,7 +80,8 @@ func TestMultipleSubscriptionsEventuallyProcessAllEvents(t *testing.T) {
 
 	// create few workers
 	for i := 0; i < 4; i++ {
-		func(workerID int) {
+		func(i int) {
+			workerID := i
 			workerEventCounter := 0
 
 			err := client.Register(
@@ -88,7 +90,7 @@ func TestMultipleSubscriptionsEventuallyProcessAllEvents(t *testing.T) {
 					EventName(mockEvent.EventName).
 					GroupID(groupID).
 					Context(ctx).
-					Offset(0).
+					Offset(kafka.FirstOffset).
 					Callback(func(ctx context.Context, event *Event, err error) error {
 						if ctx.Err() != nil {
 							return ctx.Err()
@@ -108,14 +110,13 @@ func TestMultipleSubscriptionsEventuallyProcessAllEvents(t *testing.T) {
 						processedEventsMutex.Lock()
 						defer processedEventsMutex.Unlock()
 
-						if workerEventCounter%50 == 0 { // fail processing each 50-th event
-							logrus.Infof("worker: %v, Event %v failed", workerID, event.EventID)
+						if workerEventCounter%25 == 0 { // fail processing each 25-th event
+							logrus.Infof("worker: %v, EventID %v failed (%d)", workerID, event.EventID, workerEventCounter)
 
 							return fmt.Errorf("worker: %v, Event %v failed", workerID, event.EventID)
 						}
 
 						processedEvents[event.EventID]++
-						logrus.Printf("worker: %v, Event %v, count: %v", workerID, event.EventID, processedEvents[event.EventID])
 
 						go func() {
 							doneChan <- true
