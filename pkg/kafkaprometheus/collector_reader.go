@@ -77,10 +77,12 @@ func (r *ReaderCollector) Collect(metrics chan<- prometheus.Metric) {
 		}
 
 		stat := stats[i]
-		if stat.Topic != topic {
-			logrus.Errorf("metric not equal, stat.Topic: %v, topic: %v", stat.Topic, topic)
+		if topic == "" {
+			logrus.Errorf("metric topic empty, stat.Topic: %v, topic: %v", stat.Topic, topic)
 			continue
 		}
+
+		// (note, `stat.Topic` includes the prefix, `topic` doesn't)
 
 		labels := []string{topic, eventName}
 
