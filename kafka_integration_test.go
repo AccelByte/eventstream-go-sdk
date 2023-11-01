@@ -439,6 +439,9 @@ func TestKafkaPubFailed(t *testing.T) {
 		doneChan <- true
 	}
 
+	eventCtx, cancel := context.WithTimeout(ctx, time.Second)
+	defer cancel()
+
 	err := client.Publish(
 		NewPublish().
 			Topic(topicName).
@@ -449,7 +452,7 @@ func TestKafkaPubFailed(t *testing.T) {
 			SessionID(mockEvent.SessionID).
 			TraceID(mockEvent.TraceID).
 			SpanContext(mockEvent.SpanContext).
-			Context(context.Background()).
+			Context(eventCtx).
 			EventID(mockEvent.EventID).
 			EventType(mockEvent.EventType).
 			EventLevel(mockEvent.EventLevel).

@@ -111,11 +111,11 @@ func setConfig(configList []*BrokerConfig, brokers []string) (BrokerConfig, erro
 		config.BaseReaderConfig.CommitInterval = 100 * time.Millisecond // 0 means synchronous commits, we don't support it
 	}
 
-	if config.ReadTimeout != 0 {
+	if config.BaseWriterConfig.ReadTimeout == 0 && config.ReadTimeout != 0 {
 		config.BaseWriterConfig.ReadTimeout = config.ReadTimeout
 	}
 
-	if config.WriteTimeout != 0 {
+	if config.BaseWriterConfig.WriteTimeout == 0 && config.WriteTimeout != 0 {
 		config.BaseWriterConfig.WriteTimeout = config.WriteTimeout
 	}
 
@@ -227,7 +227,7 @@ func (client *KafkaClient) Publish(publishBuilder *PublishBuilder) error {
 		go func(topic string) {
 			err = backoff.RetryNotify(func() error {
 				return client.publishEvent(publishBuilder.ctx, topic, publishBuilder.eventName, config, message)
-			}, backoff.WithMaxRetries(newPublishBackoff(), maxBackOffCount),
+			}, backoff.WithContext(newPublishBackoff(), publishBuilder.ctx),
 				func(err error, d time.Duration) {
 					logrus.
 						WithField("Topic Name", topic).
