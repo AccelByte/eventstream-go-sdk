@@ -136,6 +136,7 @@ type PublishBuilder struct {
 	payload          map[string]interface{}
 	errorCallback    func(event *Event, err error)
 	ctx              context.Context
+	timeout          time.Duration
 }
 
 // NewPublish create new PublishBuilder instance
@@ -283,6 +284,12 @@ func (p *PublishBuilder) ErrorCallback(errorCallback func(event *Event, err erro
 // default: context.Background()
 func (p *PublishBuilder) Context(ctx context.Context) *PublishBuilder {
 	p.ctx = ctx
+	return p
+}
+
+// Timeout defines publish event timeout
+func (p *PublishBuilder) Timeout(timeout time.Duration) *PublishBuilder {
+	p.timeout = timeout
 	return p
 }
 
