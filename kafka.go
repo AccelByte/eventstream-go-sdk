@@ -37,9 +37,9 @@ import (
 const (
 	defaultReaderSize     = 10e6 // 10MB
 	maxBackOffCount       = 4
-	kafkaMaxWait          = time.Second
+	kafkaMaxWait          = time.Second // (for consumer message batching)
 	saslScramAuth         = "SASL-SCRAM"
-	defaultPublishTimeout = 60 * kafkaMaxWait
+	defaultPublishTimeout = 60 * time.Second
 
 	auditLogTopicEnvKey  = "APP_EVENT_STREAM_AUDIT_LOG_TOPIC"
 	auditLogEnableEnvKey = "APP_EVENT_STREAM_AUDIT_LOG_ENABLED"
