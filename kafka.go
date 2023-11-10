@@ -35,10 +35,11 @@ import (
 )
 
 const (
-	defaultReaderSize = 10e6 // 10MB
-	maxBackOffCount   = 4
-	kafkaMaxWait      = time.Second
-	saslScramAuth     = "SASL-SCRAM"
+	defaultReaderSize     = 10e6 // 10MB
+	maxBackOffCount       = 4
+	kafkaMaxWait          = time.Second // (for consumer message batching)
+	saslScramAuth         = "SASL-SCRAM"
+	defaultPublishTimeout = 60 * time.Second
 
 	auditLogTopicEnvKey  = "APP_EVENT_STREAM_AUDIT_LOG_TOPIC"
 	auditLogEnableEnvKey = "APP_EVENT_STREAM_AUDIT_LOG_ENABLED"
@@ -224,10 +225,17 @@ func (client *KafkaClient) Publish(publishBuilder *PublishBuilder) error {
 	for _, pubTopic := range publishBuilder.topic {
 		topic := constructTopic(client.prefix, pubTopic)
 
+		if publishBuilder.timeout == 0 {
+			publishBuilder.timeout = defaultPublishTimeout
+		}
+
 		go func(topic string) {
+			publishCtx, cancelPublish := context.WithTimeout(context.Background(), publishBuilder.timeout)
+			defer cancelPublish()
+
 			err = backoff.RetryNotify(func() error {
-				return client.publishEvent(publishBuilder.ctx, topic, publishBuilder.eventName, config, message)
-			}, backoff.WithContext(newPublishBackoff(), publishBuilder.ctx),
+				return client.publishEvent(publishCtx, topic, publishBuilder.eventName, config, message)
+			}, backoff.WithContext(newPublishBackoff(), publishCtx),
 				func(err error, d time.Duration) {
 					logrus.
 						WithField("Topic Name", topic).
