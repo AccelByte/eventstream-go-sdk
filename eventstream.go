@@ -25,8 +25,8 @@ import (
 
 	"github.com/AccelByte/eventstream-go-sdk/v3/pkg/kafkaprometheus"
 	validator "github.com/AccelByte/justice-input-validation-go"
+	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/segmentio/kafka-go"
 	"github.com/sirupsen/logrus"
 )
 
@@ -95,11 +95,7 @@ type BrokerConfig struct {
 	DialTimeout      time.Duration
 	ReadTimeout      time.Duration // deprecated: use baseWriterConfig.ReadTimeout
 	WriteTimeout     time.Duration // deprecated: use baseWriterConfig.WriteTimeout
-	Balancer         kafka.Balancer
 	SecurityConfig   *SecurityConfig
-
-	BaseWriterConfig *kafka.WriterConfig
-	BaseReaderConfig *kafka.ReaderConfig
 
 	MetricsRegistry *prometheus.Registry // optional registry to report metrics to prometheus (used for kafka stats)
 }
@@ -301,7 +297,7 @@ type SubscribeBuilder struct {
 func NewSubscribe() *SubscribeBuilder {
 	return &SubscribeBuilder{
 		ctx:    context.Background(),
-		offset: kafka.LastOffset,
+		offset: int64(kafka.OffsetEnd), //todo double check
 	}
 }
 
@@ -525,7 +521,7 @@ func (auditLogBuilder *AuditLogBuilder) Key(key string) *AuditLogBuilder {
 	return auditLogBuilder
 }
 
-func (auditLogBuilder *AuditLogBuilder) Build() (kafka.Message, error) {
+func (auditLogBuilder *AuditLogBuilder) Build() (*kafka.Message, error) {
 
 	id := generateID()
 	auditLog := &AuditLog{
@@ -564,20 +560,20 @@ func (auditLogBuilder *AuditLogBuilder) Build() (kafka.Message, error) {
 	if err != nil {
 		logrus.WithField("action", auditLog.ActionName).
 			Errorf("unable to validate audit log. error : %v", err)
-		return kafka.Message{}, err
+		return &kafka.Message{}, err
 	}
 	if !valid {
-		return kafka.Message{}, errInvalidPubStruct
+		return &kafka.Message{}, errInvalidPubStruct
 	}
 
 	auditLogBytes, marshalErr := json.Marshal(auditLog)
 	if marshalErr != nil {
 		logrus.WithField("action", auditLog.ActionName).
 			Errorf("unable to marshal audit log : %v, error: %v", auditLog, marshalErr)
-		return kafka.Message{}, marshalErr
+		return &kafka.Message{}, marshalErr
 	}
 
-	return kafka.Message{
+	return &kafka.Message{
 		Key:   []byte(auditLogBuilder.key),
 		Value: auditLogBytes,
 	}, nil

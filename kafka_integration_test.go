@@ -27,7 +27,6 @@ import (
 	"time"
 
 	"github.com/mitchellh/mapstructure"
-	"github.com/segmentio/kafka-go"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -56,7 +55,6 @@ func createKafkaClient(t *testing.T) Client {
 		DialTimeout:      2 * time.Second,
 		ReadTimeout:      2 * time.Second,
 		WriteTimeout:     2 * time.Second,
-		BaseWriterConfig: &kafka.WriterConfig{BatchSize: 5},
 	}
 
 	brokerList := []string{"localhost:9092"}

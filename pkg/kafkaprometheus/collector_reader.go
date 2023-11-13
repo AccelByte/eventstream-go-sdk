@@ -17,6 +17,7 @@
 package kafkaprometheus
 
 import (
+	"fmt"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
 )
@@ -24,6 +25,9 @@ import (
 // ReaderCollector implements prometheus' Collector interface, for kafka reader.
 type ReaderCollector struct {
 	Client KafkaStatCollector
+}
+
+type ReaderStat struct {
 }
 
 var (
@@ -77,38 +81,39 @@ func (r *ReaderCollector) Collect(metrics chan<- prometheus.Metric) {
 		}
 
 		stat := stats[i]
+		fmt.Println(stat)
 		if topic == "" {
-			logrus.Errorf("metric topic empty, stat.Topic: %v, topic: %v", stat.Topic, topic)
+			logrus.Errorf("metric topic empty, topic: %v", topic)
 			continue
 		}
 
 		// (note, `stat.Topic` includes the prefix, `topic` doesn't)
 
-		labels := []string{topic, eventName}
+		//labels := []string{topic, eventName}
 
-		metrics <- counter(readerDials, stat.Dials, labels...)
-		metrics <- counter(readerFetches, stat.Fetches, labels...)
-		metrics <- counter(readerMessages, stat.Messages, labels...)
-		metrics <- counter(readerBytes, stat.Bytes, labels...)
-		metrics <- counter(readerRebalances, stat.Rebalances, labels...)
-		metrics <- counter(readerTimeouts, stat.Timeouts, labels...)
-		metrics <- counter(readerErrors, stat.Errors, labels...)
-
-		metrics <- gauge(readerDialTimeAvg, stat.DialTime.Avg.Seconds(), labels...)
-		metrics <- gauge(readerDialTimeMax, stat.DialTime.Max.Seconds(), labels...)
-		metrics <- gauge(readerReadTimeAvg, stat.ReadTime.Avg.Seconds(), labels...)
-		metrics <- gauge(readerReadTimeMax, stat.ReadTime.Max.Seconds(), labels...)
-		metrics <- gauge(readerWaitTimeAvg, stat.WaitTime.Avg.Seconds(), labels...)
-		metrics <- gauge(readerWaitTimeMax, stat.WaitTime.Max.Seconds(), labels...)
-		metrics <- gauge(readerFetchSizeAvg, float64(stat.FetchSize.Avg), labels...)
-		metrics <- gauge(readerFetchSizeMax, float64(stat.FetchSize.Max), labels...)
-		metrics <- gauge(readerFetchBytesAvg, float64(stat.FetchBytes.Avg), labels...)
-		metrics <- gauge(readerFetchBytesMax, float64(stat.FetchBytes.Max), labels...)
-
-		metrics <- gauge(readerOffset, float64(stat.Offset), labels...)
-		metrics <- gauge(readerLag, float64(stat.Lag), labels...)
-		metrics <- gauge(readerQueueLength, float64(stat.QueueLength), labels...)
-		metrics <- gauge(readerQueueCapacity, float64(stat.QueueCapacity), labels...)
+		//metrics <- counter(readerDials, stat.Dials, labels...)
+		//metrics <- counter(readerFetches, stat.Fetches, labels...)
+		//metrics <- counter(readerMessages, stat.Messages, labels...)
+		//metrics <- counter(readerBytes, stat.Bytes, labels...)
+		//metrics <- counter(readerRebalances, stat.Rebalances, labels...)
+		//metrics <- counter(readerTimeouts, stat.Timeouts, labels...)
+		//metrics <- counter(readerErrors, stat.Errors, labels...)
+		//
+		//metrics <- gauge(readerDialTimeAvg, stat.DialTime.Avg.Seconds(), labels...)
+		//metrics <- gauge(readerDialTimeMax, stat.DialTime.Max.Seconds(), labels...)
+		//metrics <- gauge(readerReadTimeAvg, stat.ReadTime.Avg.Seconds(), labels...)
+		//metrics <- gauge(readerReadTimeMax, stat.ReadTime.Max.Seconds(), labels...)
+		//metrics <- gauge(readerWaitTimeAvg, stat.WaitTime.Avg.Seconds(), labels...)
+		//metrics <- gauge(readerWaitTimeMax, stat.WaitTime.Max.Seconds(), labels...)
+		//metrics <- gauge(readerFetchSizeAvg, float64(stat.FetchSize.Avg), labels...)
+		//metrics <- gauge(readerFetchSizeMax, float64(stat.FetchSize.Max), labels...)
+		//metrics <- gauge(readerFetchBytesAvg, float64(stat.FetchBytes.Avg), labels...)
+		//metrics <- gauge(readerFetchBytesMax, float64(stat.FetchBytes.Max), labels...)
+		//
+		//metrics <- gauge(readerOffset, float64(stat.Offset), labels...)
+		//metrics <- gauge(readerLag, float64(stat.Lag), labels...)
+		//metrics <- gauge(readerQueueLength, float64(stat.QueueLength), labels...)
+		//metrics <- gauge(readerQueueCapacity, float64(stat.QueueCapacity), labels...)
 	}
 }
 

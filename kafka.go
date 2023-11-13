@@ -18,7 +18,6 @@ package eventstream
 
 import (
 	"context"
-	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -29,8 +28,7 @@ import (
 
 	"github.com/AccelByte/eventstream-go-sdk/v3/pkg/kafkaprometheus"
 	"github.com/cenkalti/backoff"
-	"github.com/segmentio/kafka-go"
-	"github.com/segmentio/kafka-go/sasl/scram"
+	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
 	"github.com/sirupsen/logrus"
 )
 
@@ -61,17 +59,15 @@ type KafkaClient struct {
 	// enable strict validation for event fields
 	strictValidation bool
 
-	// publish configuration
-	publishConfig kafka.WriterConfig
+	publishTopic string
 
-	// subscribe configuration
-	subscribeConfig kafka.ReaderConfig
+	configMap *kafka.ConfigMap
 
 	// current subscribers
-	readers map[string]*kafka.Reader
+	readers map[string]*kafka.Consumer
 
 	// current writers
-	writers map[string]*kafka.Writer
+	writers map[string]*kafka.Producer
 
 	// mutex to avoid runtime races to access subscribers map
 	ReadersLock sync.RWMutex
@@ -88,74 +84,6 @@ func setConfig(configList []*BrokerConfig, brokers []string) (BrokerConfig, erro
 	if hasConfig {
 		config = *configList[0]
 	}
-	if config.BaseWriterConfig == nil {
-		config.BaseWriterConfig = &kafka.WriterConfig{}
-	}
-	if config.BaseReaderConfig == nil {
-		config.BaseReaderConfig = &kafka.ReaderConfig{}
-	}
-
-	// set config defaults
-	config.BaseWriterConfig.Brokers = brokers
-	config.BaseReaderConfig.Brokers = brokers
-
-	if config.BaseReaderConfig.MaxBytes == 0 {
-		config.BaseReaderConfig.MaxBytes = defaultReaderSize
-	}
-
-	if config.BaseReaderConfig.MaxWait == 0 {
-		config.BaseReaderConfig.MaxWait = kafkaMaxWait
-	}
-
-	if config.BaseReaderConfig.CommitInterval == 0 {
-		config.BaseReaderConfig.CommitInterval = 100 * time.Millisecond // 0 means synchronous commits, we don't support it
-	}
-
-	if config.ReadTimeout != 0 {
-		config.BaseWriterConfig.ReadTimeout = config.ReadTimeout
-	}
-
-	if config.WriteTimeout != 0 {
-		config.BaseWriterConfig.WriteTimeout = config.WriteTimeout
-	}
-
-	if hasConfig {
-		dialer := &kafka.Dialer{}
-		if config.DialTimeout != 0 {
-			dialer.Timeout = config.DialTimeout
-		}
-
-		if config.SecurityConfig != nil && config.SecurityConfig.AuthenticationType == saslScramAuth {
-			mechanism, err := scram.Mechanism(scram.SHA512, config.SecurityConfig.SASLUsername, config.SecurityConfig.SASLPassword)
-			if err != nil {
-				logrus.Error("unable to initialize kafka scram authentication", err)
-				return config, err
-			}
-			dialer.SASLMechanism = mechanism
-			dialer.DualStack = true
-			dialer.TLS = &tls.Config{}
-		}
-
-		if config.CACertFile != "" {
-			logrus.Debug("set TLS certificate")
-
-			cert, err := GetTLSCertFromFile(config.CACertFile)
-			if err != nil {
-				logrus.Error("unable to get TLS certificate", err)
-				return config, err
-			}
-
-			tlsConfig := &tls.Config{
-				Certificates: []tls.Certificate{*cert},
-			}
-
-			dialer.TLS = tlsConfig
-		}
-
-		config.BaseWriterConfig.Dialer = dialer
-		config.BaseReaderConfig.Dialer = dialer
-		config.BaseWriterConfig.Balancer = config.Balancer
-	}
 
 	return config, nil
 }
@@ -171,10 +99,9 @@ func newKafkaClient(brokers []string, prefix string, configList ...*BrokerConfig
 	client := &KafkaClient{
 		prefix:           prefix,
 		strictValidation: config.StrictValidation,
-		publishConfig:    *config.BaseWriterConfig,
-		subscribeConfig:  *config.BaseReaderConfig,
-		readers:          make(map[string]*kafka.Reader),
-		writers:          make(map[string]*kafka.Writer),
+		readers:          make(map[string]*kafka.Consumer),
+		writers:          make(map[string]*kafka.Producer),
+		configMap:        &kafka.ConfigMap{},
 	}
 	if config.MetricsRegistry != nil {
 		err = config.MetricsRegistry.Register(&kafkaprometheus.WriterCollector{Client: client})
@@ -214,7 +141,7 @@ func (client *KafkaClient) Publish(publishBuilder *PublishBuilder) error {
 		return fmt.Errorf("unable to construct event : %s , error : %v", publishBuilder.eventName, err)
 	}
 
-	config := client.publishConfig
+	config := client.configMap
 
 	if len(publishBuilder.topic) > 1 {
 		// TODO, change Topic() api to only allow 1 topic so we can simplify this logic. It will be a breaking change.
@@ -283,7 +210,7 @@ func (client *KafkaClient) PublishSync(publishBuilder *PublishBuilder) error {
 		return fmt.Errorf("unable to construct event : %s , error : %v", publishBuilder.eventName, err)
 	}
 
-	config := client.publishConfig
+	config := client.configMap
 	if len(publishBuilder.topic) != 1 {
 		return fmt.Errorf("incorrect number of topics for sync publish")
 	}
@@ -294,9 +221,9 @@ func (client *KafkaClient) PublishSync(publishBuilder *PublishBuilder) error {
 }
 
 // Publish send event to a topic
-func (client *KafkaClient) publishEvent(ctx context.Context, topic, eventName string, config kafka.WriterConfig,
-	message kafka.Message) (err error) {
-	writer := &kafka.Writer{}
+func (client *KafkaClient) publishEvent(ctx context.Context, topic, eventName string, config *kafka.ConfigMap,
+	message *kafka.Message) (err error) {
+	writer := &kafka.Producer{}
 
 	logFields := logrus.
 		WithField("Topic Name", topic).
@@ -316,25 +243,28 @@ func (client *KafkaClient) publishEvent(ctx context.Context, topic, eventName st
 				return
 			}
 
-			client.deleteWriter(config.Topic)
+			client.deleteWriter(topic)
 
 			err = fmt.Errorf("recover: %v", r)
 		}
 	}()
 
-	config.Topic = topic
+	client.publishTopic = topic
 	writer = client.getWriter(config)
-	err = writer.WriteMessages(ctx, message)
+
+	//todo: add delivery channel
+	err = writer.Produce(message, nil)
 	if err != nil {
 		if errors.Is(err, io.ErrClosedPipe) {
 			// new a writer and retry
 			writer = client.newWriter(config)
-			err = writer.WriteMessages(ctx, message)
+			//todo: add delivery channel
+			err = writer.Produce(message, nil)
 		}
 
 		if err != nil {
 			// delete writer if it fails to publish the event
-			client.deleteWriter(config.Topic)
+			client.deleteWriter(client.publishTopic)
 
 			return err
 		}
@@ -362,9 +292,9 @@ func (client *KafkaClient) PublishAuditLog(auditLogBuilder *AuditLogBuilder) err
 
 // publishAndRetryFailure will publish message to kafka, if it fails, will retry at most 3 times.
 // If the message finally failed to publish, will call the error callback function to process this failure.
-func (client *KafkaClient) publishAndRetryFailure(context context.Context, topic, eventName string, message kafka.Message, failureCallback PublishErrorCallbackFunc) error {
+func (client *KafkaClient) publishAndRetryFailure(context context.Context, topic, eventName string, message *kafka.Message, failureCallback PublishErrorCallbackFunc) error {
 
-	config := client.publishConfig
+	config := client.configMap
 	topic = constructTopic(client.prefix, topic)
 
 	go func() {
@@ -392,7 +322,7 @@ func (client *KafkaClient) publishAndRetryFailure(context context.Context, topic
 }
 
 // ConstructEvent construct event message
-func ConstructEvent(publishBuilder *PublishBuilder) (kafka.Message, *Event, error) {
+func ConstructEvent(publishBuilder *PublishBuilder) (*kafka.Message, *Event, error) {
 	id := generateID()
 	key := publishBuilder.key
 	if publishBuilder.key == "" {
@@ -424,10 +354,10 @@ func ConstructEvent(publishBuilder *PublishBuilder) (kafka.Message, *Event, erro
 
 	eventBytes, err := marshal(event)
 	if err != nil {
-		return kafka.Message{}, event, err
+		return &kafka.Message{}, event, err
 	}
 
-	return kafka.Message{
+	return &kafka.Message{
 		Key:   []byte(key),
 		Value: eventBytes,
 	}, event, nil
@@ -480,11 +410,12 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 	}
 
 	go func() {
-		config := client.subscribeConfig
-		config.Topic = topic
-		config.GroupID = groupID
-		config.StartOffset = subscribeBuilder.offset
-		reader := kafka.NewReader(config)
+		config := client.configMap
+		err = config.SetKey("group.id", groupID)
+		err = config.SetKey("auto.offset.reset", "earliest")
+		reader, _ := kafka.NewConsumer(config)
+		//todo: handle error
+
 		client.setSubscriberReader(subscribeBuilder, reader)
 
 		var eventProcessingFailed bool
@@ -528,29 +459,35 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 
 				return
 			default:
-				consumerMessage, errRead := reader.FetchMessage(subscribeBuilder.ctx)
-				if errRead != nil {
-					if errRead == context.Canceled {
-						loggerFields.Infof("subscriber shut down because context cancelled")
-					} else {
-						loggerFields.Errorf("subscriber unable to fetch message: %v", errRead)
-					}
+				//todo: what todo with this logic?
+				//consumerMessage, errRead := reader.FetchMessage(subscribeBuilder.ctx)
+				//if errRead != nil {
+				//	if errRead == context.Canceled {
+				//		loggerFields.Infof("subscriber shut down because context cancelled")
+				//	} else {
+				//		loggerFields.Errorf("subscriber unable to fetch message: %v", errRead)
+				//	}
+				//
+				//	if subscribeBuilder.ctx.Err() != nil {
+				//		// the subscription is shutting down. triggered by an external context cancellation
+				//		loggerFields.Warn("triggered an external context cancellation. Cancelling the subscription")
+				//		continue // Shutting down because ctx expired
+				//	}
+				//
+				//	// On read error we just retry (after slight delay).
+				//	// Typical errors from the cluster include: consumer group is rebalancing, or leader re-election.
+				//	// Those aren't hard errors so we should just call FetchMessage again.
+				//	// It can also return IO errors like EOF, but not that reader automatically handles reconnecting to the cluster.
+				//	time.Sleep(200 * time.Millisecond)
+				//	continue
+				//}
 
-					if subscribeBuilder.ctx.Err() != nil {
-						// the subscription is shutting down. triggered by an external context cancellation
-						loggerFields.Warn("triggered an external context cancellation. Cancelling the subscription")
-						continue // Shutting down because ctx expired
-					}
+				err = reader.SubscribeTopics([]string{topic}, nil)
 
-					// On read error we just retry (after slight delay).
-					// Typical errors from the cluster include: consumer group is rebalancing, or leader re-election.
-					// Those aren't hard errors so we should just call FetchMessage again.
-					// It can also return IO errors like EOF, but not that reader automatically handles reconnecting to the cluster.
-					time.Sleep(200 * time.Millisecond)
-					continue
-				}
+				consumerMessage, err := reader.ReadMessage(time.Second)
+				//todo: handle error
 
-				err := client.processMessage(subscribeBuilder, consumerMessage, topic)
+				err = client.processMessage(subscribeBuilder, consumerMessage, topic)
 				if err != nil {
 					loggerFields.Error("unable to process the event: ", err)
 
@@ -560,7 +497,8 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 					return
 				}
 
-				err = reader.CommitMessages(subscribeBuilder.ctx, consumerMessage)
+				_, err = reader.CommitMessage(consumerMessage)
+				//todo: handle returned topic partition
 				if err != nil {
 					if subscribeBuilder.ctx.Err() == nil {
 						// the subscription is shutting down. triggered by an external context cancellation
@@ -600,7 +538,7 @@ func (client *KafkaClient) registerSubscriber(subscribeBuilder *SubscribeBuilder
 	return false
 }
 
-func (client *KafkaClient) setSubscriberReader(subscribeBuilder *SubscribeBuilder, reader *kafka.Reader) {
+func (client *KafkaClient) setSubscriberReader(subscribeBuilder *SubscribeBuilder, reader *kafka.Consumer) {
 	slug := subscribeBuilder.Slug()
 	client.ReadersLock.Lock()
 	defer client.ReadersLock.Unlock()
@@ -608,27 +546,33 @@ func (client *KafkaClient) setSubscriberReader(subscribeBuilder *SubscribeBuilde
 }
 
 // getWriter get a writer based on config
-func (client *KafkaClient) getWriter(config kafka.WriterConfig) *kafka.Writer {
+func (client *KafkaClient) getWriter(config *kafka.ConfigMap) *kafka.Producer {
 	client.WritersLock.Lock()
 	defer client.WritersLock.Unlock()
 
-	if writer, ok := client.writers[config.Topic]; ok {
+	if writer, ok := client.writers[client.publishTopic]; ok {
 		return writer
 	}
 
-	writer := kafka.NewWriter(config)
-	client.writers[config.Topic] = writer
+	writer, err := kafka.NewProducer(config)
+	if err != nil {
+		logrus.Error(err)
+		//todo handle error properly
+	}
+
+	client.writers[client.publishTopic] = writer
 
 	return writer
 }
 
 // newWriter new a writer
-func (client *KafkaClient) newWriter(config kafka.WriterConfig) *kafka.Writer {
-	writer := kafka.NewWriter(config)
+func (client *KafkaClient) newWriter(config *kafka.ConfigMap) *kafka.Producer {
+
+	writer, _ := kafka.NewProducer(config)
 
 	client.WritersLock.Lock()
 	defer client.WritersLock.Unlock()
-	client.writers[config.Topic] = writer
+	client.writers[client.publishTopic] = writer
 
 	return writer
 }
@@ -640,7 +584,7 @@ func (client *KafkaClient) deleteWriter(topic string) {
 
 	writer, ok := client.writers[topic]
 	if ok {
-		_ = writer.Close()
+		writer.Close()
 	}
 
 	// we only delete the writer from the slice but no close, should close in some interval?
@@ -648,7 +592,7 @@ func (client *KafkaClient) deleteWriter(topic string) {
 }
 
 // processMessage process a message from kafka
-func (client *KafkaClient) processMessage(subscribeBuilder *SubscribeBuilder, message kafka.Message, topic string) error {
+func (client *KafkaClient) processMessage(subscribeBuilder *SubscribeBuilder, message *kafka.Message, topic string) error {
 	if subscribeBuilder.callbackRaw != nil {
 		return subscribeBuilder.callbackRaw(subscribeBuilder.ctx, message.Value, nil)
 	}
@@ -675,7 +619,7 @@ func (client *KafkaClient) processMessage(subscribeBuilder *SubscribeBuilder, me
 }
 
 // unmarshal unmarshal received message into event struct
-func unmarshal(message kafka.Message) (*Event, error) {
+func unmarshal(message *kafka.Message) (*Event, error) {
 	var event *Event
 
 	err := json.Unmarshal(message.Value, &event)
@@ -683,8 +627,8 @@ func unmarshal(message kafka.Message) (*Event, error) {
 		return &Event{}, err
 	}
 
-	event.Partition = message.Partition
-	event.Offset = message.Offset
+	event.Partition = int(message.TopicPartition.Partition)
+	event.Offset = int64(message.TopicPartition.Offset)
 	event.Key = string(message.Key)
 
 	return event, nil
@@ -738,35 +682,39 @@ func loadAuditEnv() {
 }
 
 // GetWriterStats per topic
-func (client *KafkaClient) GetWriterStats() (stats []kafka.WriterStats, topics []string) {
+func (client *KafkaClient) GetWriterStats() (stats []map[string]interface{}, topics []string) {
 	client.WritersLock.RLock()
 	defer client.WritersLock.RUnlock()
 
-	stats = make([]kafka.WriterStats, 0, len(client.writers))
+	stats = make([]map[string]interface{}, 0, len(client.writers))
 	topics = make([]string, 0, len(client.writers))
 	for _, writer := range client.writers {
 		if writer == nil {
 			continue
 		}
-		topics = append(topics, writer.Topic)
-		stats = append(stats, writer.Stats())
+
+		//todo: get topic and writer stats
+		topics = append(topics, "")
+		stats = append(stats, nil)
 	}
 	return stats, topics
 }
 
 // GetReaderStats returns stats for each subscriber, and its topic, eventName and groupID.
-func (client *KafkaClient) GetReaderStats() (stats []kafka.ReaderStats, slugs []string) {
+func (client *KafkaClient) GetReaderStats() (stats []map[string]interface{}, slugs []string) {
 	client.ReadersLock.RLock()
 	defer client.ReadersLock.RUnlock()
 
-	stats = make([]kafka.ReaderStats, 0, len(client.readers))
+	stats = make([]map[string]interface{}, 0, len(client.readers))
 	slugs = make([]string, 0, len(client.readers))
 	for slug, reader := range client.readers {
 		if reader == nil {
 			continue
 		}
 		slugs = append(slugs, slug)
-		stats = append(stats, reader.Stats())
+
+		//todo: get reader stats
+		stats = append(stats, nil)
 	}
 	return stats, slugs
 }

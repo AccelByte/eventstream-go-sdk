@@ -51,18 +51,18 @@ func (w *WriterCollector) Collect(metrics chan<- prometheus.Metric) {
 			continue
 		}*/
 
-		metrics <- counter(writerWrites, s.Writes, topic)
-		metrics <- counter(writerMessages, s.Messages, topic)
-		metrics <- counter(writerBytes, s.Bytes, topic)
-		metrics <- counter(writerErrors, s.Errors, topic)
-		metrics <- counter(writerRetries, s.Retries, topic)
+		metrics <- counter(writerWrites, s["Writes"].(int64), topic)
+		metrics <- counter(writerMessages, s["Messages"].(int64), topic)
+		metrics <- counter(writerBytes, s["Bytes"].(int64), topic)
+		metrics <- counter(writerErrors, s["Errors"].(int64), topic)
+		metrics <- counter(writerRetries, s["Retries"].(int64), topic)
 
-		metrics <- summaryDuration(writerBatchTime, s.BatchTime, topic)
-		metrics <- summaryDuration(writerBatchQueueTime, s.BatchQueueTime, topic)
-		metrics <- summaryDuration(writerWriteTime, s.WriteTime, topic)
-		metrics <- summaryDuration(writerWaitTime, s.WaitTime, topic)
-		metrics <- summaryCount(writerBatchSizeSummary, s.BatchSize, topic)
-		metrics <- summaryCount(writerBatchBytesSummary, s.BatchBytes, topic)
+		metrics <- summaryDuration(writerBatchTime, s["BatchTime"].(DurationStats), topic)
+		metrics <- summaryDuration(writerBatchQueueTime, s["BatchQueueTime"].(DurationStats), topic)
+		metrics <- summaryDuration(writerWriteTime, s["WriteTime"].(DurationStats), topic)
+		metrics <- summaryDuration(writerWaitTime, s["WaitTime"].(DurationStats), topic)
+		metrics <- summaryCount(writerBatchSizeSummary, s["BatchSize"].(SummaryStats), topic)
+		metrics <- summaryCount(writerBatchBytesSummary, s["BatchBytes"].(SummaryStats), topic)
 	}
 }
 

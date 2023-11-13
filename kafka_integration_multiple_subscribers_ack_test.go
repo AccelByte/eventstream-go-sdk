@@ -23,7 +23,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/segmentio/kafka-go"
+	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -90,7 +90,7 @@ func TestMultipleSubscriptionsEventuallyProcessAllEvents(t *testing.T) {
 					EventName(mockEvent.EventName).
 					GroupID(groupID).
 					Context(ctx).
-					Offset(kafka.FirstOffset).
+					Offset(int64(kafka.OffsetBeginning)).
 					Callback(func(ctx context.Context, event *Event, err error) error {
 						if ctx.Err() != nil {
 							return ctx.Err()

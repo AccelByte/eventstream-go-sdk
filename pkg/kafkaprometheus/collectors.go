@@ -22,9 +22,9 @@ package kafkaprometheus
 */
 import (
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/segmentio/kafka-go"
 	"github.com/sirupsen/logrus"
 	"strings"
+	"time"
 )
 
 const (
@@ -35,15 +35,31 @@ const (
 const SlugSeparator = "$" // SlugSeparator is excluded by topicRegex.
 
 type KafkaStatCollector interface {
-	GetWriterStats() ([]kafka.WriterStats, []string)
-	GetReaderStats() ([]kafka.ReaderStats, []string)
+	GetWriterStats() ([]map[string]interface{}, []string)
+	GetReaderStats() ([]map[string]interface{}, []string)
 }
 
-func summaryCount(s *prometheus.SummaryVec, ss kafka.SummaryStats, labels ...string) prometheus.Metric {
+func summaryCount(s *prometheus.SummaryVec, ss SummaryStats, labels ...string) prometheus.Metric {
 	return summary(s, ss.Count, float64(ss.Sum), float64(ss.Avg), float64(ss.Min), float64(ss.Max), labels...)
 }
 
-func summaryDuration(s *prometheus.SummaryVec, ds kafka.DurationStats, labels ...string) prometheus.Metric {
+type DurationStats struct {
+	Avg   time.Duration `metric:"avg" type:"gauge"`
+	Min   time.Duration `metric:"min" type:"gauge"`
+	Max   time.Duration `metric:"max" type:"gauge"`
+	Count int64         `metric:"count" type:"counter"`
+	Sum   time.Duration `metric:"sum" type:"counter"`
+}
+
+type SummaryStats struct {
+	Avg   int64 `metric:"avg" type:"gauge"`
+	Min   int64 `metric:"min" type:"gauge"`
+	Max   int64 `metric:"max" type:"gauge"`
+	Count int64 `metric:"count" type:"counter"`
+	Sum   int64 `metric:"sum" type:"counter"`
+}
+
+func summaryDuration(s *prometheus.SummaryVec, ds DurationStats, labels ...string) prometheus.Metric {
 	return summary(s, ds.Count, ds.Sum.Seconds(), ds.Avg.Seconds(), ds.Min.Seconds(), ds.Max.Seconds(), labels...)
 }
 
