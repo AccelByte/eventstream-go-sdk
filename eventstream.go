@@ -90,12 +90,13 @@ var (
 
 // BrokerConfig is custom configuration for message broker
 type BrokerConfig struct {
-	StrictValidation bool
-	CACertFile       string
-	DialTimeout      time.Duration
-	ReadTimeout      time.Duration // deprecated: use baseWriterConfig.ReadTimeout
-	WriteTimeout     time.Duration // deprecated: use baseWriterConfig.WriteTimeout
-	SecurityConfig   *SecurityConfig
+	StrictValidation   bool
+	CACertFile         string
+	DialTimeout        time.Duration
+	ReadTimeout        time.Duration // deprecated: use baseWriterConfig.ReadTimeout
+	WriteTimeout       time.Duration // deprecated: use baseWriterConfig.WriteTimeout
+	SecurityConfig     *SecurityConfig
+	AutoCommitInterval time.Duration
 
 	MetricsRegistry *prometheus.Registry // optional registry to report metrics to prometheus (used for kafka stats)
 }
