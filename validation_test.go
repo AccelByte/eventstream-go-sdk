@@ -221,6 +221,14 @@ func TestValidateSubscriberEvent(t *testing.T) {
 			},
 			expected: false,
 		},
+		{
+			input: &SubscribeBuilder{
+				topic:     "accelbyte.dev.topic-123",
+				eventName: "",
+				callback:  callbackFunc,
+			},
+			expected: true,
+		},
 	}
 
 	for _, testCase := range testCases {

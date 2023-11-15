@@ -79,6 +79,9 @@ type KafkaClient struct {
 
 	// mutex to avoid runtime races to access writers map
 	WritersLock sync.RWMutex
+
+	// current topic subscribed on the kafka client
+	topicSubscribedCount map[string]int
 }
 
 // setConfig sets some defaults for producers and consumers. Needed for backwards compatibility.
@@ -170,12 +173,13 @@ func newKafkaClient(brokers []string, prefix string, configList ...*BrokerConfig
 	config, err := setConfig(configList, brokers)
 
 	client := &KafkaClient{
-		prefix:           prefix,
-		strictValidation: config.StrictValidation,
-		publishConfig:    *config.BaseWriterConfig,
-		subscribeConfig:  *config.BaseReaderConfig,
-		readers:          make(map[string]*kafka.Reader),
-		writers:          make(map[string]*kafka.Writer),
+		prefix:               prefix,
+		strictValidation:     config.StrictValidation,
+		publishConfig:        *config.BaseWriterConfig,
+		subscribeConfig:      *config.BaseReaderConfig,
+		readers:              make(map[string]*kafka.Reader),
+		writers:              make(map[string]*kafka.Writer),
+		topicSubscribedCount: make(map[string]int),
 	}
 	if config.MetricsRegistry != nil {
 		err = config.MetricsRegistry.Register(&kafkaprometheus.WriterCollector{Client: client})
@@ -446,6 +450,10 @@ func (client *KafkaClient) unregister(subscribeBuilder *SubscribeBuilder) {
 	client.ReadersLock.Lock()
 	defer client.ReadersLock.Unlock()
 	delete(client.readers, subscribeBuilder.Slug())
+	currentSubscribeCount := client.topicSubscribedCount[subscribeBuilder.topic]
+	if currentSubscribeCount > 0 {
+		client.topicSubscribedCount[subscribeBuilder.topic] = currentSubscribeCount - 1
+	}
 }
 
 // Register register callback function and then subscribe topic
@@ -602,6 +610,11 @@ func (client *KafkaClient) registerSubscriber(subscribeBuilder *SubscribeBuilder
 			logrus.Warnf("multiple subscribers for %+v", subscribeBuilder)
 		}
 	}
+	currentSubscribeCount := client.topicSubscribedCount[subscribeBuilder.topic]
+	if currentSubscribeCount > 0 {
+		logrus.WithField("topic", subscribeBuilder.topic).Warn("multiple subscribe for a topic")
+	}
+	client.topicSubscribedCount[subscribeBuilder.topic] = currentSubscribeCount + 1
 
 	client.readers[slug] = nil //  It's registered. Later we set the actual value to the kafka.Writer.
 

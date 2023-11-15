@@ -133,17 +133,19 @@ func validateSubscribeEvent(subscribeBuilder *SubscribeBuilder) error {
 		return errInvalidTopicFormat
 	}
 
-	if isEventNameValid := validateTopicEvent(subscribeBuilder.eventName); !isEventNameValid {
-		logrus.
-			WithField("Topic Name", subscribeBuilder.topic).
-			WithField("Event Name", subscribeBuilder.eventName).
-			Errorf("unable to validate subscribe event. error: invalid event name format")
-		return errInvalidEventNameFormat
+	if subscribeBuilder.eventName != "" {
+		if isEventNameValid := validateTopicEvent(subscribeBuilder.eventName); !isEventNameValid {
+			logrus.
+				WithField("Topic Name", subscribeBuilder.topic).
+				WithField("Event Name", subscribeBuilder.eventName).
+				Errorf("unable to validate subscribe event. error: invalid event name format")
+			return errInvalidEventNameFormat
+		}
 	}
 
 	subscribeEvent := struct {
 		Topic       string `valid:"required"`
-		EventName   string `valid:"required"`
+		EventName   string
 		GroupID     string
 		Callback    func(ctx context.Context, event *Event, err error) error
 		CallbackRaw func(ctx context.Context, msg []byte, err error) error
