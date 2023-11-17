@@ -101,7 +101,7 @@ type BrokerConfig struct {
 	BaseWriterConfig *kafka.WriterConfig
 	BaseReaderConfig *kafka.ReaderConfig
 
-	MetricsRegistry *prometheus.Registry // optional registry to report metrics to prometheus (used for kafka stats)
+	MetricsRegistry prometheus.Registerer // optional registry to report metrics to prometheus (used for kafka stats)
 }
 
 // SecurityConfig contains security configuration for message broker
