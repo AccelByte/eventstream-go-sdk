@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"io"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -62,8 +63,6 @@ type KafkaClient struct {
 	publishTopic string
 
 	configMap *kafka.ConfigMap
-
-	configMapLock sync.RWMutex
 
 	// flag to indicate that auto commit with interval is enabled instead of commit per message
 	autoCommitIntervalEnabled bool
@@ -107,7 +106,7 @@ func newKafkaClient(brokers []string, prefix string, configList ...*BrokerConfig
 		readers:          make(map[string]*kafka.Consumer),
 		writers:          make(map[string]*kafka.Producer),
 		configMap: &kafka.ConfigMap{
-			"bootstrap.servers":  "kafka:9092", // TODO: get kafka url from somewhere
+			"bootstrap.servers":  strings.Join(brokers, ","),
 			"enable.auto.commit": false,
 		},
 	}
@@ -266,6 +265,10 @@ func (client *KafkaClient) publishEvent(ctx context.Context, topic, eventName st
 	client.publishTopic = topic
 	writer = client.getWriter(config)
 
+	// TODO: since ConstructEvent() has already defined a single topic inside the message,
+	// 		we can remove this line below once we modify the Publish to only support publishing to a topic
+	message.TopicPartition = kafka.TopicPartition{Topic: &topic, Partition: kafka.PartitionAny}
+
 	//todo: add delivery channel
 	err = writer.Produce(message, nil)
 	if err != nil {
@@ -281,6 +284,17 @@ func (client *KafkaClient) publishEvent(ctx context.Context, topic, eventName st
 			client.deleteWriter(client.publishTopic)
 
 			return err
+		}
+	}
+
+	for e := range writer.Events() {
+		switch ev := e.(type) {
+		case *kafka.Message:
+			if ev.TopicPartition.Error != nil {
+				return ev.TopicPartition.Error
+			}
+		case kafka.Error:
+			return ev
 		}
 	}
 
@@ -427,35 +441,34 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 		)
 	}
 
+	config := client.configMap
+
+	err = config.SetKey("group.id", groupID)
+	if err != nil {
+		return err
+	}
+	err = config.SetKey("auto.offset.reset", "earliest")
+	if err != nil {
+		return err
+	}
+
+	reader, err := kafka.NewConsumer(config)
+	if err != nil {
+		return err
+	}
+
+	err = reader.SubscribeTopics([]string{topic}, nil)
+	if err != nil {
+		return err
+	}
+
 	go func() {
-		config := client.configMap
-
-		err := func() error {
-			client.configMapLock.Lock()
-			defer client.configMapLock.Unlock()
-
-			err = config.SetKey("group.id", groupID)
-			if err != nil {
-				return err
-			}
-			err = config.SetKey("auto.offset.reset", "earliest")
-			return err
-		}()
-		if err != nil {
-			return
-		}
-
-		reader, err := kafka.NewConsumer(config)
-		if err != nil {
-			return
-		}
 
 		client.setSubscriberReader(subscribeBuilder, reader)
 
 		var eventProcessingFailed bool
 
 		defer func() {
-
 			reader.Close() // nolint: errcheck
 			client.unregister(subscribeBuilder)
 
@@ -516,16 +529,15 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 				//	continue
 				//}
 
-				err = reader.SubscribeTopics([]string{topic}, nil)
+				consumerMessage, err := reader.ReadMessage(1 * time.Second)
 				if err != nil {
 					time.Sleep(200 * time.Millisecond)
 					continue
 				}
-
-				consumerMessage, err := reader.ReadMessage(time.Second)
-				if err != nil {
-					time.Sleep(200 * time.Millisecond)
-					continue
+				if subscribeBuilder.ctx.Err() != nil {
+					// the subscription is shutting down. triggered by an external context cancellation
+					loggerFields.Warn("triggered an external context cancellation. Cancelling the subscription")
+					continue // Shutting down because ctx expired
 				}
 
 				err = client.processMessage(subscribeBuilder, consumerMessage, topic)
