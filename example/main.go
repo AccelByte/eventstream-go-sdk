@@ -19,9 +19,10 @@ package main
 import (
 	"context"
 	"fmt"
+	"time"
+
 	"github.com/AccelByte/eventstream-go-sdk/v3"
 	"github.com/sirupsen/logrus"
-	"time"
 )
 
 // nolint: funlen
@@ -48,6 +49,7 @@ func main() {
 			EventName("eventName").
 			Topic("topic").
 			Context(context.Background()).
+			GroupID("groupid").
 			Callback(func(ctx context.Context, event *eventstream.Event, err error) error {
 				if err != nil {
 					logrus.Error(err)
@@ -55,7 +57,8 @@ func main() {
 				fmt.Printf("%+v", event)
 
 				return nil
-			}))
+			}).
+			SendErrorDLQ(true))
 
 	if err != nil {
 		logrus.Error(err)

@@ -42,6 +42,7 @@ const (
 const (
 	separator      = "." // topic prefix separator
 	defaultVersion = 1
+	dlq            = "dlq"
 )
 
 // log level
@@ -292,6 +293,8 @@ type SubscribeBuilder struct {
 	eventName   string
 	ctx         context.Context
 	callbackRaw func(ctx context.Context, msgValue []byte, err error) error
+	// flag to send error message to DLQ
+	sendErrorDLQ bool
 }
 
 // NewSubscribe create new SubscribeBuilder instance
@@ -346,6 +349,13 @@ func (s *SubscribeBuilder) CallbackRaw(
 // default: context.Background()
 func (s *SubscribeBuilder) Context(ctx context.Context) *SubscribeBuilder {
 	s.ctx = ctx
+	return s
+}
+
+// SendErrorDLQ to send error message to DLQ topic.
+// DLQ topic: 'topic' + -dlq
+func (s *SubscribeBuilder) SendErrorDLQ(dlq bool) *SubscribeBuilder {
+	s.sendErrorDLQ = dlq
 	return s
 }
 

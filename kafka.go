@@ -372,6 +372,10 @@ func ConstructEvent(publishBuilder *PublishBuilder) (*kafka.Message, *Event, err
 	}
 
 	return &kafka.Message{
+		TopicPartition: kafka.TopicPartition{
+			Topic:     &publishBuilder.topic[0], // need to check which topic to use
+			Partition: kafka.PartitionAny,
+		},
 		Key:   []byte(key),
 		Value: eventBytes,
 	}, event, nil
@@ -513,6 +517,10 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 				//}
 
 				err = reader.SubscribeTopics([]string{topic}, nil)
+				if err != nil {
+					time.Sleep(200 * time.Millisecond)
+					continue
+				}
 
 				consumerMessage, err := reader.ReadMessage(time.Second)
 				if err != nil {
@@ -633,7 +641,6 @@ func (client *KafkaClient) processMessage(subscribeBuilder *SubscribeBuilder, me
 	}
 
 	event, err := unmarshal(message)
-
 	if err != nil {
 		logrus.
 			WithField("Topic Name", topic).
@@ -641,6 +648,12 @@ func (client *KafkaClient) processMessage(subscribeBuilder *SubscribeBuilder, me
 			Error("unable to unmarshal message from subscribe in kafka: ", err)
 
 		// as retry will fail infinitely - return nil to ACK the event
+
+		// send message to DLQ topic
+		if subscribeBuilder.sendErrorDLQ {
+			client.publishDLQ(subscribeBuilder.ctx, topic, subscribeBuilder.eventName, message)
+		}
+
 		return nil
 	}
 
@@ -651,6 +664,21 @@ func (client *KafkaClient) processMessage(subscribeBuilder *SubscribeBuilder, me
 	}
 
 	return client.runCallback(subscribeBuilder, event)
+}
+
+func (client *KafkaClient) publishDLQ(ctx context.Context, topic, eventName string, message *kafka.Message) {
+	dlqTopic := topic + separator + dlq
+	config := client.configMap
+
+	message.TopicPartition = kafka.TopicPartition{
+		Topic:     &dlqTopic,
+		Partition: kafka.PartitionAny,
+	}
+
+	err := client.publishEvent(ctx, dlqTopic, eventName, config, message)
+	if err != nil {
+		logrus.Warnf("unable to publish dlq message err : %v", err.Error())
+	}
 }
 
 // unmarshal unmarshal received message into event struct
