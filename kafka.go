@@ -156,6 +156,13 @@ func (client *KafkaClient) Publish(publishBuilder *PublishBuilder) error {
 
 	config := client.configMap
 
+	if publishBuilder.deliveryTimeout != 0 {
+		err = config.SetKey("delivery.timeout.ms", publishBuilder.deliveryTimeout)
+		if err != nil {
+			return err
+		}
+	}
+
 	if len(publishBuilder.topic) > 1 {
 		// TODO, change Topic() api to only allow 1 topic so we can simplify this logic. It will be a breaking change.
 		logrus.Warnf("eventstream got more than 1 topic per publish: %+v", publishBuilder.topic)
@@ -224,6 +231,14 @@ func (client *KafkaClient) PublishSync(publishBuilder *PublishBuilder) error {
 	}
 
 	config := client.configMap
+
+	if publishBuilder.deliveryTimeout != 0 {
+		err = config.SetKey("delivery.timeout.ms", publishBuilder.deliveryTimeout)
+		if err != nil {
+			return err
+		}
+	}
+
 	if len(publishBuilder.topic) != 1 {
 		return fmt.Errorf("incorrect number of topics for sync publish")
 	}
