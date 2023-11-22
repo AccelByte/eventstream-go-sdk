@@ -158,13 +158,7 @@ func (client *KafkaClient) Publish(publishBuilder *PublishBuilder) error {
 	config := client.configMap
 
 	if publishBuilder.deliveryTimeout != 0 {
-		err := func() error {
-			client.configMapLock.Lock()
-			defer client.configMapLock.Unlock()
-
-			err = config.SetKey("delivery.timeout.ms", publishBuilder.deliveryTimeout)
-			return err
-		}()
+		err = config.SetKey("delivery.timeout.ms", publishBuilder.deliveryTimeout)
 		if err != nil {
 			return err
 		}
@@ -240,13 +234,7 @@ func (client *KafkaClient) PublishSync(publishBuilder *PublishBuilder) error {
 	config := client.configMap
 
 	if publishBuilder.deliveryTimeout != 0 {
-		err := func() error {
-			client.configMapLock.Lock()
-			defer client.configMapLock.Unlock()
-
-			err = config.SetKey("delivery.timeout.ms", publishBuilder.deliveryTimeout)
-			return err
-		}()
+		err = config.SetKey("delivery.timeout.ms", publishBuilder.deliveryTimeout)
 		if err != nil {
 			return err
 		}
