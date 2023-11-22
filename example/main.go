@@ -76,9 +76,6 @@ func main() {
 		Payload:          mockPayload,
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*2)
-	defer cancel()
-
 	err = client.Publish(eventstream.NewPublish().
 		Topic("topic").
 		EventName(mockEvent.EventName).
@@ -98,9 +95,9 @@ func main() {
 		Privacy(mockEvent.Privacy).
 		AdditionalFields(mockEvent.AdditionalFields).
 		Version(2).
-		Context(ctx).
+		Context(context.Background()).
 		Payload(mockPayload).
-		DeliveryTimeout(time.Second * 2))
+		DeliveryTimeout(time.Millisecond * 1))
 	if err != nil {
 		logrus.Error(err)
 	}
