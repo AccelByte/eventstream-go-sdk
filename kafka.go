@@ -155,11 +155,20 @@ func (client *KafkaClient) Publish(publishBuilder *PublishBuilder) error {
 		return fmt.Errorf("unable to construct event : %s , error : %v", publishBuilder.eventName, err)
 	}
 
-	if publishBuilder.deliveryTimeout != 0 {
-		client.configMap.SetKey("delivery.timeout.ms", publishBuilder.deliveryTimeout)
-	}
-
 	config := client.configMap
+
+	if publishBuilder.deliveryTimeout != 0 {
+		err := func() error {
+			client.configMapLock.Lock()
+			defer client.configMapLock.Unlock()
+
+			err = config.SetKey("delivery.timeout.ms", publishBuilder.deliveryTimeout)
+			return err
+		}()
+		if err != nil {
+			return err
+		}
+	}
 
 	if len(publishBuilder.topic) > 1 {
 		// TODO, change Topic() api to only allow 1 topic so we can simplify this logic. It will be a breaking change.
@@ -228,11 +237,21 @@ func (client *KafkaClient) PublishSync(publishBuilder *PublishBuilder) error {
 		return fmt.Errorf("unable to construct event : %s , error : %v", publishBuilder.eventName, err)
 	}
 
+	config := client.configMap
+
 	if publishBuilder.deliveryTimeout != 0 {
-		client.configMap.SetKey("delivery.timeout.ms", publishBuilder.deliveryTimeout)
+		err := func() error {
+			client.configMapLock.Lock()
+			defer client.configMapLock.Unlock()
+
+			err = config.SetKey("delivery.timeout.ms", publishBuilder.deliveryTimeout)
+			return err
+		}()
+		if err != nil {
+			return err
+		}
 	}
 
-	config := client.configMap
 	if len(publishBuilder.topic) != 1 {
 		return fmt.Errorf("incorrect number of topics for sync publish")
 	}
