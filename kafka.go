@@ -155,6 +155,10 @@ func (client *KafkaClient) Publish(publishBuilder *PublishBuilder) error {
 		return fmt.Errorf("unable to construct event : %s , error : %v", publishBuilder.eventName, err)
 	}
 
+	if publishBuilder.deliveryTimeout != 0 {
+		client.configMap.SetKey("delivery.timeout.ms", publishBuilder.deliveryTimeout)
+	}
+
 	config := client.configMap
 
 	if len(publishBuilder.topic) > 1 {
@@ -222,6 +226,10 @@ func (client *KafkaClient) PublishSync(publishBuilder *PublishBuilder) error {
 			WithField("Event Name", publishBuilder.eventName).
 			Error("unable to construct event: ", err)
 		return fmt.Errorf("unable to construct event : %s , error : %v", publishBuilder.eventName, err)
+	}
+
+	if publishBuilder.deliveryTimeout != 0 {
+		client.configMap.SetKey("delivery.timeout.ms", publishBuilder.deliveryTimeout)
 	}
 
 	config := client.configMap
