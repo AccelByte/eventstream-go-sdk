@@ -34,10 +34,11 @@ import (
 )
 
 const (
-	defaultReaderSize = 10e6 // 10MB
-	maxBackOffCount   = 4
-	kafkaMaxWait      = time.Second
-	saslScramAuth     = "SASL-SCRAM"
+	defaultReaderSize     = 10e6 // 10MB
+	maxBackOffCount       = 4
+	kafkaMaxWait          = time.Second // (for consumer message batching)
+	saslScramAuth         = "SASL-SCRAM"
+	defaultPublishTimeout = 60 * time.Second
 
 	auditLogTopicEnvKey  = "APP_EVENT_STREAM_AUDIT_LOG_TOPIC"
 	auditLogEnableEnvKey = "APP_EVENT_STREAM_AUDIT_LOG_ENABLED"
@@ -78,6 +79,9 @@ type KafkaClient struct {
 
 	// mutex to avoid runtime races to access writers map
 	WritersLock sync.RWMutex
+
+	// current topic subscribed on the kafka client
+	topicSubscribedCount map[string]int
 }
 
 // setConfig sets some defaults for producers and consumers. Needed for backwards compatibility.
@@ -101,14 +105,15 @@ func newKafkaClient(brokers []string, prefix string, configList ...*BrokerConfig
 	config, err := setConfig(configList, brokers)
 
 	client := &KafkaClient{
-		prefix:           prefix,
-		strictValidation: config.StrictValidation,
+		prefix:               prefix,
+		strictValidation:     config.StrictValidation,
 		readers:          make(map[string]*kafka.Consumer),
-		writers:          make(map[string]*kafka.Producer),
+		writers:              make(map[string]*kafka.Producer),
 		configMap: &kafka.ConfigMap{
 			"bootstrap.servers":  strings.Join(brokers, ","),
 			"enable.auto.commit": false,
 		},
+		topicSubscribedCount: make(map[string]int),
 	}
 	if config.AutoCommitInterval != 0 {
 		client.autoCommitIntervalEnabled = true
@@ -171,10 +176,17 @@ func (client *KafkaClient) Publish(publishBuilder *PublishBuilder) error {
 	for _, pubTopic := range publishBuilder.topic {
 		topic := constructTopic(client.prefix, pubTopic)
 
+		if publishBuilder.timeout == 0 {
+			publishBuilder.timeout = defaultPublishTimeout
+		}
+
 		go func(topic string) {
+			publishCtx, cancelPublish := context.WithTimeout(context.Background(), publishBuilder.timeout)
+			defer cancelPublish()
+
 			err = backoff.RetryNotify(func() error {
-				return client.publishEvent(publishBuilder.ctx, topic, publishBuilder.eventName, config, message)
-			}, backoff.WithMaxRetries(newPublishBackoff(), maxBackOffCount),
+				return client.publishEvent(publishCtx, topic, publishBuilder.eventName, config, message)
+			}, backoff.WithContext(newPublishBackoff(), publishCtx),
 				func(err error, d time.Duration) {
 					logrus.
 						WithField("Topic Name", topic).
@@ -376,6 +388,7 @@ func ConstructEvent(publishBuilder *PublishBuilder) (*kafka.Message, *Event, err
 		EventName:        publishBuilder.eventName,
 		Namespace:        publishBuilder.namespace,
 		ParentNamespace:  publishBuilder.parentNamespace,
+		UnionNamespace:   publishBuilder.unionNamespace,
 		ClientID:         publishBuilder.clientID,
 		UserID:           publishBuilder.userID,
 		TraceID:          publishBuilder.traceID,
@@ -415,6 +428,10 @@ func (client *KafkaClient) unregister(subscribeBuilder *SubscribeBuilder) {
 	client.ReadersLock.Lock()
 	defer client.ReadersLock.Unlock()
 	delete(client.readers, subscribeBuilder.Slug())
+	currentSubscribeCount := client.topicSubscribedCount[subscribeBuilder.topic]
+	if currentSubscribeCount > 0 {
+		client.topicSubscribedCount[subscribeBuilder.topic] = currentSubscribeCount - 1
+	}
 }
 
 // Register register callback function and then subscribe topic
@@ -602,6 +619,11 @@ func (client *KafkaClient) registerSubscriber(subscribeBuilder *SubscribeBuilder
 			logrus.Warnf("multiple subscribers for %+v", subscribeBuilder)
 		}
 	}
+	currentSubscribeCount := client.topicSubscribedCount[subscribeBuilder.topic]
+	if currentSubscribeCount > 0 {
+		logrus.WithField("topic", subscribeBuilder.topic).Warn("multiple subscribe for a topic")
+	}
+	client.topicSubscribedCount[subscribeBuilder.topic] = currentSubscribeCount + 1
 
 	client.readers[slug] = nil //  It's registered. Later we set the actual value to the kafka.Writer.
 

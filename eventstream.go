@@ -60,6 +60,7 @@ type Event struct {
 	EventName        string                 `json:"name,omitempty"`
 	Namespace        string                 `json:"namespace,omitempty"`
 	ParentNamespace  string                 `json:"parentNamespace,omitempty"`
+	UnionNamespace   string                 `json:"unionNamespace,omitempty"`
 	ClientID         string                 `json:"clientId,omitempty"`
 	TraceID          string                 `json:"traceId,omitempty"`
 	SpanContext      string                 `json:"spanContext,omitempty"`
@@ -99,7 +100,7 @@ type BrokerConfig struct {
 	SecurityConfig     *SecurityConfig
 	AutoCommitInterval time.Duration
 
-	MetricsRegistry *prometheus.Registry // optional registry to report metrics to prometheus (used for kafka stats)
+	MetricsRegistry prometheus.Registerer // optional registry to report metrics to prometheus (used for kafka stats)
 }
 
 // SecurityConfig contains security configuration for message broker
@@ -115,6 +116,7 @@ type PublishBuilder struct {
 	eventName        string
 	namespace        string
 	parentNamespace  string
+	unionNamespace   string
 	clientID         string
 	traceID          string
 	spanContext      string
@@ -134,6 +136,7 @@ type PublishBuilder struct {
 	payload          map[string]interface{}
 	errorCallback    func(event *Event, err error)
 	ctx              context.Context
+	timeout          time.Duration
 	deliveryTimeout  time.Duration
 }
 
@@ -166,6 +169,12 @@ func (p *PublishBuilder) Namespace(namespace string) *PublishBuilder {
 
 func (p *PublishBuilder) ParentNamespace(parentNamespace string) *PublishBuilder {
 	p.parentNamespace = parentNamespace
+	return p
+}
+
+// Parent namespace for AGS Starter, leave it empty for AGS Premium
+func (p *PublishBuilder) UnionNamespace(unionNamespace string) *PublishBuilder {
+	p.unionNamespace = unionNamespace
 	return p
 }
 
@@ -282,6 +291,12 @@ func (p *PublishBuilder) ErrorCallback(errorCallback func(event *Event, err erro
 // default: context.Background()
 func (p *PublishBuilder) Context(ctx context.Context) *PublishBuilder {
 	p.ctx = ctx
+	return p
+}
+
+// Timeout defines publish event timeout
+func (p *PublishBuilder) Timeout(timeout time.Duration) *PublishBuilder {
+	p.timeout = timeout
 	return p
 }
 
