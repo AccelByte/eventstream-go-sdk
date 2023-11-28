@@ -137,7 +137,6 @@ type PublishBuilder struct {
 	errorCallback    func(event *Event, err error)
 	ctx              context.Context
 	timeout          time.Duration
-	deliveryTimeout  time.Duration
 }
 
 // NewPublish create new PublishBuilder instance
@@ -294,16 +293,10 @@ func (p *PublishBuilder) Context(ctx context.Context) *PublishBuilder {
 	return p
 }
 
-// Timeout defines publish event timeout
+// Timeout is an upper bound on the time to report success or failure after a call to send() returns.
+// The value of this config should be greater than or equal to the sum of request.timeout.ms and linger.ms.
 func (p *PublishBuilder) Timeout(timeout time.Duration) *PublishBuilder {
 	p.timeout = timeout
-	return p
-}
-
-// Delivery timeout is an upper bound on the time to report success or failure after a call to send() returns.
-// The value of this config should be greater than or equal to the sum of request.timeout.ms and linger.ms.
-func (p *PublishBuilder) DeliveryTimeout(timeout time.Duration) *PublishBuilder {
-	p.deliveryTimeout = timeout
 	return p
 }
 

@@ -34,11 +34,11 @@ import (
 )
 
 const (
-	defaultReaderSize     = 10e6 // 10MB
-	maxBackOffCount       = 4
-	kafkaMaxWait          = time.Second // (for consumer message batching)
-	saslScramAuth         = "SASL-SCRAM"
-	defaultPublishTimeout = 60 * time.Second
+	defaultReaderSize       = 10e6 // 10MB
+	maxBackOffCount         = 4
+	kafkaMaxWait            = time.Second // (for consumer message batching)
+	saslScramAuth           = "SASL-SCRAM"
+	defaultPublishTimeoutMs = 60000 // 60 second
 
 	auditLogTopicEnvKey  = "APP_EVENT_STREAM_AUDIT_LOG_TOPIC"
 	auditLogEnableEnvKey = "APP_EVENT_STREAM_AUDIT_LOG_ENABLED"
@@ -105,10 +105,10 @@ func newKafkaClient(brokers []string, prefix string, configList ...*BrokerConfig
 	config, err := setConfig(configList, brokers)
 
 	client := &KafkaClient{
-		prefix:               prefix,
-		strictValidation:     config.StrictValidation,
+		prefix:           prefix,
+		strictValidation: config.StrictValidation,
 		readers:          make(map[string]*kafka.Consumer),
-		writers:              make(map[string]*kafka.Producer),
+		writers:          make(map[string]*kafka.Producer),
 		configMap: &kafka.ConfigMap{
 			"bootstrap.servers":  strings.Join(brokers, ","),
 			"enable.auto.commit": false,
@@ -161,11 +161,13 @@ func (client *KafkaClient) Publish(publishBuilder *PublishBuilder) error {
 
 	config := client.configMap
 
-	if publishBuilder.deliveryTimeout != 0 {
-		err = config.SetKey("delivery.timeout.ms", publishBuilder.deliveryTimeout)
-		if err != nil {
-			return err
-		}
+	if publishBuilder.timeout == 0 {
+		publishBuilder.timeout = defaultPublishTimeoutMs
+	}
+
+	err = config.SetKey("delivery.timeout.ms", publishBuilder.timeout)
+	if err != nil {
+		return err
 	}
 
 	if len(publishBuilder.topic) > 1 {
@@ -176,17 +178,10 @@ func (client *KafkaClient) Publish(publishBuilder *PublishBuilder) error {
 	for _, pubTopic := range publishBuilder.topic {
 		topic := constructTopic(client.prefix, pubTopic)
 
-		if publishBuilder.timeout == 0 {
-			publishBuilder.timeout = defaultPublishTimeout
-		}
-
 		go func(topic string) {
-			publishCtx, cancelPublish := context.WithTimeout(context.Background(), publishBuilder.timeout)
-			defer cancelPublish()
-
 			err = backoff.RetryNotify(func() error {
-				return client.publishEvent(publishCtx, topic, publishBuilder.eventName, config, message)
-			}, backoff.WithContext(newPublishBackoff(), publishCtx),
+				return client.publishEvent(publishBuilder.ctx, topic, publishBuilder.eventName, config, message)
+			}, backoff.WithContext(newPublishBackoff(), publishBuilder.ctx),
 				func(err error, d time.Duration) {
 					logrus.
 						WithField("Topic Name", topic).
@@ -244,11 +239,13 @@ func (client *KafkaClient) PublishSync(publishBuilder *PublishBuilder) error {
 
 	config := client.configMap
 
-	if publishBuilder.deliveryTimeout != 0 {
-		err = config.SetKey("delivery.timeout.ms", publishBuilder.deliveryTimeout)
-		if err != nil {
-			return err
-		}
+	if publishBuilder.timeout == 0 {
+		publishBuilder.timeout = defaultPublishTimeoutMs
+	}
+
+	err = config.SetKey("delivery.timeout.ms", publishBuilder.timeout)
+	if err != nil {
+		return err
 	}
 
 	if len(publishBuilder.topic) != 1 {
