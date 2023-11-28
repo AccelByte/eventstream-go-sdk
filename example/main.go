@@ -97,7 +97,7 @@ func main() {
 		Version(2).
 		Context(context.Background()).
 		Payload(mockPayload).
-		DeliveryTimeout(time.Millisecond * 1))
+		Timeout(time.Millisecond * 1))
 	if err != nil {
 		logrus.Error(err)
 	}
