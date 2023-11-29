@@ -68,6 +68,9 @@ type KafkaClient struct {
 	// flag to indicate that auto commit with interval is enabled instead of commit per message
 	autoCommitIntervalEnabled bool
 
+	// flag to indicate commit per message before the message processed
+	commitBeforeMessage bool
+
 	// current subscribers
 	readers map[string]*kafka.Consumer
 
@@ -120,6 +123,7 @@ func newKafkaClient(brokers []string, prefix string, configList ...*BrokerConfig
 		client.configMap.SetKey("enable.auto.commit", true)
 		client.configMap.SetKey("auto.commit.interval.ms", int(config.AutoCommitInterval.Milliseconds()))
 	}
+	client.commitBeforeMessage = config.CommitBeforeProcessing
 
 	if config.MetricsRegistry != nil {
 		err = config.MetricsRegistry.Register(&kafkaprometheus.WriterCollector{Client: client})
@@ -456,6 +460,7 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 
 	topic := constructTopic(client.prefix, subscribeBuilder.topic)
 	groupID := constructGroupID(client.prefix, subscribeBuilder.groupID)
+	groupInstanceID := constructGroupInstanceID(client.prefix, subscribeBuilder.groupInstanceID)
 
 	loggerFields := logrus.
 		WithField("Topic Name", topic).
@@ -479,6 +484,12 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 	err = config.SetKey("auto.offset.reset", "earliest")
 	if err != nil {
 		return err
+	}
+	if groupInstanceID != "" {
+		err = config.SetKey("group.instance.id", groupInstanceID)
+		if err != nil {
+			return err
+		}
 	}
 
 	reader, err := kafka.NewConsumer(config)
@@ -569,6 +580,20 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 					continue // Shutting down because ctx expired
 				}
 
+				if !client.autoCommitIntervalEnabled && client.commitBeforeMessage {
+					_, err = reader.CommitMessage(consumerMessage)
+					//todo: handle returned topic partition
+					if err != nil {
+						if subscribeBuilder.ctx.Err() == nil {
+							// the subscription is shutting down. triggered by an external context cancellation
+							loggerFields.Warn("triggered an external context cancellation. Cancelling the subscription")
+							continue
+						}
+
+						loggerFields.Error("unable to commit the event: ", err)
+					}
+				}
+
 				err = client.processMessage(subscribeBuilder, consumerMessage, topic)
 				if err != nil {
 					loggerFields.Error("unable to process the event: ", err)
@@ -578,7 +603,7 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 
 					return
 				}
-				if !client.autoCommitIntervalEnabled {
+				if !client.autoCommitIntervalEnabled && !client.commitBeforeMessage {
 					if subscribeBuilder.asyncCommitMessage {
 						// Asynchronously commit the offset
 						go asyncCommitMessages(reader, consumerMessage)
