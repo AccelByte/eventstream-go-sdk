@@ -92,13 +92,18 @@ var (
 
 // BrokerConfig is custom configuration for message broker
 type BrokerConfig struct {
-	StrictValidation   bool
-	CACertFile         string
-	DialTimeout        time.Duration
-	ReadTimeout        time.Duration // deprecated: use baseWriterConfig.ReadTimeout
-	WriteTimeout       time.Duration // deprecated: use baseWriterConfig.WriteTimeout
-	SecurityConfig     *SecurityConfig
+	StrictValidation bool
+	CACertFile       string
+	DialTimeout      time.Duration
+	ReadTimeout      time.Duration // deprecated: use baseWriterConfig.ReadTimeout
+	WriteTimeout     time.Duration // deprecated: use baseWriterConfig.WriteTimeout
+	SecurityConfig   *SecurityConfig
+	// Enable auto commit on every consumer polls when the interval has stepped in.
+	// Enabling it will override CommitBeforeProcessing config. Default: 0 (disabled).
 	AutoCommitInterval time.Duration
+	// Enable committing the message offset right after consumer polls and before the message is processed.
+	// Otherwise, the message offset will be committed after it is processed.
+	CommitBeforeProcessing bool
 
 	MetricsRegistry prometheus.Registerer // optional registry to report metrics to prometheus (used for kafka stats)
 }
@@ -302,13 +307,14 @@ func (p *PublishBuilder) Timeout(timeout time.Duration) *PublishBuilder {
 
 // SubscribeBuilder defines the structure of message which is sent through message broker
 type SubscribeBuilder struct {
-	topic       string
-	groupID     string
-	offset      int64
-	callback    func(ctx context.Context, event *Event, err error) error
-	eventName   string
-	ctx         context.Context
-	callbackRaw func(ctx context.Context, msgValue []byte, err error) error
+	topic           string
+	groupID         string
+	groupInstanceID string
+	offset          int64
+	callback        func(ctx context.Context, event *Event, err error) error
+	eventName       string
+	ctx             context.Context
+	callbackRaw     func(ctx context.Context, msgValue []byte, err error) error
 	// flag to send error message to DLQ
 	sendErrorDLQ bool
 }
@@ -336,6 +342,12 @@ func (s *SubscribeBuilder) Offset(offset int64) *SubscribeBuilder {
 // GroupID set subscriber groupID or queue group name
 func (s *SubscribeBuilder) GroupID(groupID string) *SubscribeBuilder {
 	s.groupID = groupID
+	return s
+}
+
+// GroupInstanceID set subscriber group instance ID
+func (s *SubscribeBuilder) GroupInstanceID(groupInstanceID string) *SubscribeBuilder {
+	s.groupInstanceID = groupInstanceID
 	return s
 }
 
