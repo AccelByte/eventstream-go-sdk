@@ -603,18 +603,22 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 
 					return
 				}
-
 				if !client.autoCommitIntervalEnabled && !client.commitBeforeMessage {
-					_, err = reader.CommitMessage(consumerMessage)
-					//todo: handle returned topic partition
-					if err != nil {
-						if subscribeBuilder.ctx.Err() == nil {
-							// the subscription is shutting down. triggered by an external context cancellation
-							loggerFields.Warn("triggered an external context cancellation. Cancelling the subscription")
-							continue
-						}
+					if subscribeBuilder.asyncCommitMessage {
+						// Asynchronously commit the offset
+						go asyncCommitMessages(reader, consumerMessage)
+					} else {
+						_, err = reader.CommitMessage(consumerMessage)
+						//todo: handle returned topic partition
+						if err != nil {
+							if subscribeBuilder.ctx.Err() == nil {
+								// the subscription is shutting down. triggered by an external context cancellation
+								loggerFields.Warn("triggered an external context cancellation. Cancelling the subscription")
+								continue
+							}
 
-						loggerFields.Error("unable to commit the event: ", err)
+							loggerFields.Error("unable to commit the event: ", err)
+						}
 					}
 				}
 			}
@@ -622,6 +626,12 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 	}()
 
 	return nil
+}
+
+func asyncCommitMessages(consumer *kafka.Consumer, message *kafka.Message) {
+	if _, err := consumer.CommitMessage(message); err != nil {
+		logrus.Error("unable to async commit the event: ", err)
+	}
 }
 
 // registerSubscriber add callback to map with topic and eventName as a key

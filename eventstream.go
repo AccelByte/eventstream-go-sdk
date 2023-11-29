@@ -317,6 +317,8 @@ type SubscribeBuilder struct {
 	callbackRaw     func(ctx context.Context, msgValue []byte, err error) error
 	// flag to send error message to DLQ
 	sendErrorDLQ bool
+	// flag to use async commit consumer
+	asyncCommitMessage bool
 }
 
 // NewSubscribe create new SubscribeBuilder instance
@@ -384,6 +386,12 @@ func (s *SubscribeBuilder) Context(ctx context.Context) *SubscribeBuilder {
 // DLQ topic: 'topic' + -dlq
 func (s *SubscribeBuilder) SendErrorDLQ(dlq bool) *SubscribeBuilder {
 	s.sendErrorDLQ = dlq
+	return s
+}
+
+// AsyncCommitMessage to asynchronously commit message offset.
+func (s *SubscribeBuilder) AsyncCommitMessage(async bool) *SubscribeBuilder {
+	s.asyncCommitMessage = async
 	return s
 }
 

@@ -116,7 +116,8 @@ func main() {
 
 				return nil
 			}).
-			SendErrorDLQ(true))
+			SendErrorDLQ(true).
+			AsyncCommitMessage(true))
 
 	if err != nil {
 		logrus.Error(err)
