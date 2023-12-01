@@ -125,6 +125,14 @@ func newKafkaClient(brokers []string, prefix string, configList ...*BrokerConfig
 	}
 	client.commitBeforeMessage = config.CommitBeforeProcessing
 
+	// must be the last config applied
+	for k, v := range config.BaseConfig {
+		err := client.configMap.SetKey(k, v)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	if config.MetricsRegistry != nil {
 		err = config.MetricsRegistry.Register(&kafkaprometheus.WriterCollector{Client: client})
 		if err != nil {
