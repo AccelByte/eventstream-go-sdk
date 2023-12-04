@@ -117,7 +117,7 @@ type SecurityConfig struct {
 
 // PublishBuilder defines the structure of message which is sent through message broker
 type PublishBuilder struct {
-	topic            []string
+	topic            string
 	eventName        string
 	namespace        string
 	parentNamespace  string
@@ -154,8 +154,8 @@ func NewPublish() *PublishBuilder {
 }
 
 // Topic set channel / topic name
-func (p *PublishBuilder) Topic(topics ...string) *PublishBuilder {
-	p.topic = append(p.topic, topics...)
+func (p *PublishBuilder) Topic(topic string) *PublishBuilder {
+	p.topic = topic
 	return p
 }
 

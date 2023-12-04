@@ -174,44 +174,37 @@ func (client *KafkaClient) Publish(publishBuilder *PublishBuilder) error {
 		return err
 	}
 
-	if len(publishBuilder.topic) > 1 {
-		// TODO, change Topic() api to only allow 1 topic so we can simplify this logic. It will be a breaking change.
-		logrus.Warnf("eventstream got more than 1 topic per publish: %+v", publishBuilder.topic)
-	}
+	topic := constructTopic(client.prefix, publishBuilder.topic)
 
-	for _, pubTopic := range publishBuilder.topic {
-		topic := constructTopic(client.prefix, pubTopic)
-
-		go func(topic string) {
-			err = backoff.RetryNotify(func() error {
-				return client.publishEvent(publishBuilder.ctx, topic, publishBuilder.eventName, config, message)
-			}, backoff.WithContext(newPublishBackoff(), publishBuilder.ctx),
-				func(err error, d time.Duration) {
-					logrus.
-						WithField("Topic Name", topic).
-						WithField("Event Name", publishBuilder.eventName).
-						WithField("backoff-duration", d).
-						Warn("retrying publish event: ", err)
-				})
-			if err != nil {
+	go func(topic string) {
+		err = backoff.RetryNotify(func() error {
+			return client.publishEvent(publishBuilder.ctx, topic, publishBuilder.eventName, config, message)
+		}, backoff.WithContext(newPublishBackoff(), publishBuilder.ctx),
+			func(err error, d time.Duration) {
 				logrus.
 					WithField("Topic Name", topic).
 					WithField("Event Name", publishBuilder.eventName).
-					Error("giving up publishing event: ", err)
-
-				if publishBuilder.errorCallback != nil {
-					publishBuilder.errorCallback(event, err)
-				}
-
-				return
-			}
-
+					WithField("backoff-duration", d).
+					Warn("retrying publish event: ", err)
+			})
+		if err != nil {
 			logrus.
 				WithField("Topic Name", topic).
 				WithField("Event Name", publishBuilder.eventName).
-				Debug("successfully publish event")
-		}(topic)
-	}
+				Error("giving up publishing event: ", err)
+
+			if publishBuilder.errorCallback != nil {
+				publishBuilder.errorCallback(event, err)
+			}
+
+			return
+		}
+
+		logrus.
+			WithField("Topic Name", topic).
+			WithField("Event Name", publishBuilder.eventName).
+			Debug("successfully publish event")
+	}(topic)
 
 	return nil
 }
@@ -256,7 +249,7 @@ func (client *KafkaClient) PublishSync(publishBuilder *PublishBuilder) error {
 		return fmt.Errorf("incorrect number of topics for sync publish")
 	}
 
-	topic := constructTopic(client.prefix, publishBuilder.topic[0])
+	topic := constructTopic(client.prefix, publishBuilder.topic)
 
 	return client.publishEvent(publishBuilder.ctx, topic, publishBuilder.eventName, config, message)
 }
@@ -292,10 +285,6 @@ func (client *KafkaClient) publishEvent(ctx context.Context, topic, eventName st
 
 	client.publishTopic = topic
 	writer = client.getWriter(config)
-
-	// TODO: since ConstructEvent() has already defined a single topic inside the message,
-	// 		we can remove this line below once we modify the Publish to only support publishing to a topic
-	message.TopicPartition = kafka.TopicPartition{Topic: &topic, Partition: kafka.PartitionAny}
 
 	//todo: add delivery channel
 	err = writer.Produce(message, nil)
@@ -416,7 +405,7 @@ func ConstructEvent(publishBuilder *PublishBuilder) (*kafka.Message, *Event, err
 
 	return &kafka.Message{
 		TopicPartition: kafka.TopicPartition{
-			Topic:     &publishBuilder.topic[0], // need to check which topic to use
+			Topic:     &publishBuilder.topic,
 			Partition: kafka.PartitionAny,
 		},
 		Key:   []byte(key),
