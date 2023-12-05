@@ -21,10 +21,11 @@ package kafkaprometheus
 	To enable, set the MetricsRegistry field on BrokerConfig when creating a kafka client.
 */
 import (
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/sirupsen/logrus"
 	"strings"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -47,7 +48,7 @@ type DurationStats struct {
 	Avg   time.Duration `metric:"avg" type:"gauge"`
 	Min   time.Duration `metric:"min" type:"gauge"`
 	Max   time.Duration `metric:"max" type:"gauge"`
-	Count int64         `metric:"count" type:"counter"`
+	Count int64         `metric:"cnt" type:"counter"`
 	Sum   time.Duration `metric:"sum" type:"counter"`
 }
 
@@ -55,7 +56,7 @@ type SummaryStats struct {
 	Avg   int64 `metric:"avg" type:"gauge"`
 	Min   int64 `metric:"min" type:"gauge"`
 	Max   int64 `metric:"max" type:"gauge"`
-	Count int64 `metric:"count" type:"counter"`
+	Count int64 `metric:"cnt" type:"counter"`
 	Sum   int64 `metric:"sum" type:"counter"`
 }
 

@@ -51,18 +51,19 @@ func (w *WriterCollector) Collect(metrics chan<- prometheus.Metric) {
 			continue
 		}*/
 
-		metrics <- counter(writerWrites, s["Writes"].(int64), topic)
-		metrics <- counter(writerMessages, s["Messages"].(int64), topic)
-		metrics <- counter(writerBytes, s["Bytes"].(int64), topic)
-		metrics <- counter(writerErrors, s["Errors"].(int64), topic)
-		metrics <- counter(writerRetries, s["Retries"].(int64), topic)
+		// librdkafka statistics fields reference: https://github.com/confluentinc/librdkafka/blob/master/STATISTICS.md
+		metrics <- counter(writerWrites, s["Writes"].(int64), topic)     // tx?
+		metrics <- counter(writerMessages, s["Messages"].(int64), topic) // txmsgs
+		metrics <- counter(writerBytes, s["Bytes"].(int64), topic)       // txmsg_bytes
+		metrics <- counter(writerErrors, s["Errors"].(int64), topic)     // txerrs
+		metrics <- counter(writerRetries, s["Retries"].(int64), topic)   // txretries
 
-		metrics <- summaryDuration(writerBatchTime, s["BatchTime"].(DurationStats), topic)
-		metrics <- summaryDuration(writerBatchQueueTime, s["BatchQueueTime"].(DurationStats), topic)
-		metrics <- summaryDuration(writerWriteTime, s["WriteTime"].(DurationStats), topic)
-		metrics <- summaryDuration(writerWaitTime, s["WaitTime"].(DurationStats), topic)
-		metrics <- summaryCount(writerBatchSizeSummary, s["BatchSize"].(SummaryStats), topic)
-		metrics <- summaryCount(writerBatchBytesSummary, s["BatchBytes"].(SummaryStats), topic)
+		metrics <- summaryDuration(writerBatchTime, s["BatchTime"].(DurationStats), topic)           // rtt
+		metrics <- summaryDuration(writerBatchQueueTime, s["BatchQueueTime"].(DurationStats), topic) // throttle
+		metrics <- summaryDuration(writerWriteTime, s["WriteTime"].(DurationStats), topic)           // outbuf_latency
+		metrics <- summaryDuration(writerWaitTime, s["WaitTime"].(DurationStats), topic)             // int_latency
+		metrics <- summaryCount(writerBatchSizeSummary, s["BatchSize"].(SummaryStats), topic)        // topics.batchcnt
+		metrics <- summaryCount(writerBatchBytesSummary, s["BatchBytes"].(SummaryStats), topic)      // topics.batchsize
 	}
 }
 
