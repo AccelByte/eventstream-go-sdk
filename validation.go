@@ -51,14 +51,12 @@ func init() {
 // validatePublishEvent validate published event
 func validatePublishEvent(publishBuilder *PublishBuilder, strictValidation bool) error {
 
-	for _, topic := range publishBuilder.topic {
-		if isTopicValid := validateTopicEvent(topic); !isTopicValid {
-			logrus.
-				WithField("Topic Name", topic).
-				WithField("Event Name", publishBuilder.eventName).
-				Errorf("unable to validate publisher event. error: invalid topic format")
-			return errInvalidTopicFormat
-		}
+	if isTopicValid := validateTopicEvent(publishBuilder.topic); !isTopicValid {
+		logrus.
+			WithField("Topic Name", publishBuilder.topic).
+			WithField("Event Name", publishBuilder.eventName).
+			Errorf("unable to validate publisher event. error: invalid topic format")
+		return errInvalidTopicFormat
 	}
 
 	if isEventNameValid := validateTopicEvent(publishBuilder.eventName); !isEventNameValid {
@@ -70,8 +68,8 @@ func validatePublishEvent(publishBuilder *PublishBuilder, strictValidation bool)
 	}
 
 	publishEvent := struct {
-		Topic     []string `valid:"required"`
-		EventName string   `valid:"required"`
+		Topic     string `valid:"required"`
+		EventName string `valid:"required"`
 		Namespace string
 		ClientID  string
 		UserID    string
