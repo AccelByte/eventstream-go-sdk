@@ -61,8 +61,6 @@ type KafkaClient struct {
 	// enable strict validation for event fields
 	strictValidation bool
 
-	publishTopic string
-
 	configMap *kafka.ConfigMap
 
 	configMapLock sync.RWMutex
@@ -290,8 +288,7 @@ func (client *KafkaClient) publishEvent(ctx context.Context, topic, eventName st
 		}
 	}()
 
-	client.publishTopic = topic
-	writer, err = client.getWriter(config)
+	writer, err = client.getWriter(config, topic)
 	if err != nil {
 		return err
 	}
@@ -302,13 +299,13 @@ func (client *KafkaClient) publishEvent(ctx context.Context, topic, eventName st
 	if err != nil {
 		if errors.Is(err, io.ErrClosedPipe) {
 			// new a writer and retry
-			writer = client.newWriter(config)
+			writer = client.newWriter(config, topic)
 			err = writer.Produce(message, nil)
 		}
 
 		if err != nil {
 			// delete writer if it fails to publish the event
-			client.deleteWriter(client.publishTopic)
+			client.deleteWriter(topic)
 
 			return err
 		}
@@ -670,11 +667,11 @@ func (client *KafkaClient) setSubscriberReader(subscribeBuilder *SubscribeBuilde
 }
 
 // getWriter get a writer based on config
-func (client *KafkaClient) getWriter(config *kafka.ConfigMap) (*kafka.Producer, error) {
+func (client *KafkaClient) getWriter(config *kafka.ConfigMap, topic string) (*kafka.Producer, error) {
 	client.WritersLock.Lock()
 	defer client.WritersLock.Unlock()
 
-	if writer, ok := client.writers[client.publishTopic]; ok {
+	if writer, ok := client.writers[topic]; ok {
 		return writer, nil
 	}
 
@@ -683,19 +680,19 @@ func (client *KafkaClient) getWriter(config *kafka.ConfigMap) (*kafka.Producer, 
 		return nil, err
 	}
 
-	client.writers[client.publishTopic] = writer
+	client.writers[topic] = writer
 
 	return writer, nil
 }
 
 // newWriter new a writer
-func (client *KafkaClient) newWriter(config *kafka.ConfigMap) *kafka.Producer {
+func (client *KafkaClient) newWriter(config *kafka.ConfigMap, topic string) *kafka.Producer {
 
 	writer, _ := kafka.NewProducer(config)
 
 	client.WritersLock.Lock()
 	defer client.WritersLock.Unlock()
-	client.writers[client.publishTopic] = writer
+	client.writers[topic] = writer
 
 	return writer
 }
