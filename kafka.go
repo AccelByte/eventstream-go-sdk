@@ -488,6 +488,7 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 			return err
 		}
 	}
+	config.SetKey("statistics.interval.ms", 5000)
 
 	reader, err := kafka.NewConsumer(config)
 	if err != nil {
@@ -543,30 +544,7 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 
 				return
 			default:
-				//todo: what todo with this logic?
-				//consumerMessage, errRead := reader.FetchMessage(subscribeBuilder.ctx)
-				//if errRead != nil {
-				//	if errRead == context.Canceled {
-				//		loggerFields.Infof("subscriber shut down because context cancelled")
-				//	} else {
-				//		loggerFields.Errorf("subscriber unable to fetch message: %v", errRead)
-				//	}
-				//
-				//	if subscribeBuilder.ctx.Err() != nil {
-				//		// the subscription is shutting down. triggered by an external context cancellation
-				//		loggerFields.Warn("triggered an external context cancellation. Cancelling the subscription")
-				//		continue // Shutting down because ctx expired
-				//	}
-				//
-				//	// On read error we just retry (after slight delay).
-				//	// Typical errors from the cluster include: consumer group is rebalancing, or leader re-election.
-				//	// Those aren't hard errors so we should just call FetchMessage again.
-				//	// It can also return IO errors like EOF, but not that reader automatically handles reconnecting to the cluster.
-				//	time.Sleep(200 * time.Millisecond)
-				//	continue
-				//}
-
-				consumerMessage, err := reader.ReadMessage(1 * time.Second)
+				consumerMessage, err := client.readMessages(reader)
 				if err != nil {
 					time.Sleep(200 * time.Millisecond)
 					continue
@@ -623,6 +601,24 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 	}()
 
 	return nil
+}
+
+func (client *KafkaClient) readMessages(reader *kafka.Consumer) (*kafka.Message, error) {
+	for {
+		ev := reader.Poll(int(time.Second.Milliseconds()))
+		switch e := ev.(type) {
+		case *kafka.Message:
+			if e.TopicPartition.Error != nil {
+				return nil, e.TopicPartition.Error
+			}
+			return e, nil
+		case kafka.Error:
+			return nil, e
+		case *kafka.Stats:
+			fmt.Println("STATS: ", ev.String())
+		default:
+		}
+	}
 }
 
 func asyncCommitMessages(consumer *kafka.Consumer, message *kafka.Message) {
