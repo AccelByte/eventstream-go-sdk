@@ -61,9 +61,9 @@ type KafkaClient struct {
 	// enable strict validation for event fields
 	strictValidation bool
 
-	publishTopic string
-
 	configMap *kafka.ConfigMap
+
+	configMapLock sync.RWMutex
 
 	// flag to indicate that auto commit with interval is enabled instead of commit per message
 	autoCommitIntervalEnabled bool
@@ -177,13 +177,14 @@ func (client *KafkaClient) Publish(publishBuilder *PublishBuilder) error {
 		publishBuilder.timeout = defaultPublishTimeoutMs
 	}
 
+	client.configMapLock.Lock()
 	err = config.SetKey("delivery.timeout.ms", publishBuilder.timeout)
 	if err != nil {
 		return err
 	}
+	client.configMapLock.Unlock()
 
 	topic := constructTopic(client.prefix, publishBuilder.topic)
-
 	go func(topic string) {
 		err = backoff.RetryNotify(func() error {
 			return client.publishEvent(publishBuilder.ctx, topic, publishBuilder.eventName, config, message)
@@ -253,10 +254,6 @@ func (client *KafkaClient) PublishSync(publishBuilder *PublishBuilder) error {
 		return err
 	}
 
-	if len(publishBuilder.topic) != 1 {
-		return fmt.Errorf("incorrect number of topics for sync publish")
-	}
-
 	topic := constructTopic(client.prefix, publishBuilder.topic)
 
 	return client.publishEvent(publishBuilder.ctx, topic, publishBuilder.eventName, config, message)
@@ -291,22 +288,24 @@ func (client *KafkaClient) publishEvent(ctx context.Context, topic, eventName st
 		}
 	}()
 
-	client.publishTopic = topic
-	writer = client.getWriter(config)
+	writer, err = client.getWriter(config, topic)
+	if err != nil {
+		return err
+	}
 
-	//todo: add delivery channel
+	message.TopicPartition = kafka.TopicPartition{Topic: &topic, Partition: kafka.PartitionAny}
+
 	err = writer.Produce(message, nil)
 	if err != nil {
 		if errors.Is(err, io.ErrClosedPipe) {
 			// new a writer and retry
-			writer = client.newWriter(config)
-			//todo: add delivery channel
+			writer = client.newWriter(config, topic)
 			err = writer.Produce(message, nil)
 		}
 
 		if err != nil {
 			// delete writer if it fails to publish the event
-			client.deleteWriter(client.publishTopic)
+			client.deleteWriter(topic)
 
 			return err
 		}
@@ -412,10 +411,6 @@ func ConstructEvent(publishBuilder *PublishBuilder) (*kafka.Message, *Event, err
 	}
 
 	return &kafka.Message{
-		TopicPartition: kafka.TopicPartition{
-			Topic:     &publishBuilder.topic,
-			Partition: kafka.PartitionAny,
-		},
 		Key:   []byte(key),
 		Value: eventBytes,
 	}, event, nil
@@ -453,6 +448,11 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 			Error("incorrect subscriber event: ", err)
 
 		return err
+	}
+
+	// librdkafka requires group ID to be set
+	if subscribeBuilder.groupID == "" {
+		subscribeBuilder.groupID = generateID()
 	}
 
 	topic := constructTopic(client.prefix, subscribeBuilder.topic)
@@ -667,33 +667,32 @@ func (client *KafkaClient) setSubscriberReader(subscribeBuilder *SubscribeBuilde
 }
 
 // getWriter get a writer based on config
-func (client *KafkaClient) getWriter(config *kafka.ConfigMap) *kafka.Producer {
+func (client *KafkaClient) getWriter(config *kafka.ConfigMap, topic string) (*kafka.Producer, error) {
 	client.WritersLock.Lock()
 	defer client.WritersLock.Unlock()
 
-	if writer, ok := client.writers[client.publishTopic]; ok {
-		return writer
+	if writer, ok := client.writers[topic]; ok {
+		return writer, nil
 	}
 
 	writer, err := kafka.NewProducer(config)
 	if err != nil {
-		logrus.Error(err)
-		//todo handle error properly
+		return nil, err
 	}
 
-	client.writers[client.publishTopic] = writer
+	client.writers[topic] = writer
 
-	return writer
+	return writer, nil
 }
 
 // newWriter new a writer
-func (client *KafkaClient) newWriter(config *kafka.ConfigMap) *kafka.Producer {
+func (client *KafkaClient) newWriter(config *kafka.ConfigMap, topic string) *kafka.Producer {
 
 	writer, _ := kafka.NewProducer(config)
 
 	client.WritersLock.Lock()
 	defer client.WritersLock.Unlock()
-	client.writers[client.publishTopic] = writer
+	client.writers[topic] = writer
 
 	return writer
 }

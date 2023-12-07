@@ -32,77 +32,77 @@ func TestValidatePublishEvent(t *testing.T) {
 	}{
 		{
 			input: &PublishBuilder{
-				topic:     []string{"topic1"},
+				topic:     "topic1",
 				eventName: "event1",
 			},
 			expected: true,
 		},
 		{
 			input: &PublishBuilder{
-				topic:     []string{"Topic-1"},
+				topic:     "Topic-1",
 				eventName: "Event-1",
 			},
 			expected: true,
 		},
 		{
 			input: &PublishBuilder{
-				topic:     []string{"accelbyte.dev.topic-123"},
+				topic:     "accelbyte.dev.topic-123",
 				eventName: "event-123",
 			},
 			expected: true,
 		},
 		{
 			input: &PublishBuilder{
-				topic:     []string{"accelbyte.dev.topic-123", "accelbyte.dev.topic-456"},
-				eventName: "event.456",
-			},
-			expected: true,
-		},
-		{
-			input: &PublishBuilder{
-				topic:     []string{"accelbyte-dev-topic-123", "accelbyte-dev-topic-456"},
+				topic:     "accelbyte-dev-topic-123",
 				eventName: "event-456",
 			},
 			expected: true,
 		},
 		{
 			input: &PublishBuilder{
-				topic:     []string{"accelbyte_dev_topic_123", "accelbyte_dev_topic_456"},
+				topic:     "accelbyte_dev_topic_456",
 				eventName: "event_456",
 			},
 			expected: true,
 		},
 		{
 			input: &PublishBuilder{
-				topic:     []string{"accelbyte.dev.topic-123", "accelbyte.dev.topic-"},
+				topic:     "accelbyte.dev.topic-123",
+				eventName: "event.456",
+			},
+			expected: true,
+		},
+		{
+			input: &PublishBuilder{
+				topic:     "accelbyte.dev.topic-",
 				eventName: "event.456",
 			},
 			expected: false,
 		},
 		{
 			input: &PublishBuilder{
-				topic:     []string{"accelbyte.dev.topic-123", "accelbyte.dev.topic-!@#"},
+				topic:     "accelbyte.dev.topic-!@#",
 				eventName: "event.456",
 			},
 			expected: false,
 		},
 		{
 			input: &PublishBuilder{
-				topic:     []string{"accelbyte.dev.topic-123", "accelbyte.dev.topic-456"},
+				topic:     "accelbyte.dev.topic-123",
 				eventName: "event.!@#",
 			},
 			expected: false,
 		},
 		{
 			input: &PublishBuilder{
-				topic:     []string{"accelbyte.dev.topic-123", "accelbyte.dev.topic-456"},
+				topic:     "accelbyte.dev.topic-456",
 				eventName: "event-",
 			},
 			expected: false,
 		},
 		{
 			input: &PublishBuilder{
-				topic:     []string{"accelbyte.dev.topic-!@#", "accelbyte.dev.topic-456"},
+				topic:     "accelbyte.dev.topic-!@#",
 				eventName: "event%",
 			},
 			expected: false,
