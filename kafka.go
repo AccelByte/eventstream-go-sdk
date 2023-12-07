@@ -27,7 +27,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/AccelByte/eventstream-go-sdk/v3/pkg/kafkaprometheus"
+	kafkaprometheus "github.com/AccelByte/eventstream-go-sdk/v3/kafkaprometheus"
+	"github.com/AccelByte/eventstream-go-sdk/v3/statistics"
 	"github.com/cenkalti/backoff"
 	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
 	"github.com/sirupsen/logrus"
@@ -85,6 +86,10 @@ type KafkaClient struct {
 
 	// current topic subscribed on the kafka client
 	topicSubscribedCount map[string]int
+
+	stats statistics.Stats
+
+	statsLock sync.RWMutex
 }
 
 // setConfig sets some defaults for producers and consumers. Needed for backwards compatibility.
@@ -143,6 +148,12 @@ func newKafkaClient(brokers []string, prefix string, configList ...*BrokerConfig
 			logrus.Errorf("failed to register kafka Readers metrics: %v", err)
 		}
 	}
+
+	// initialize empty stats
+	client.stats.BrokerStats = make(map[string]statistics.BrokerStats, 0)
+	client.stats.TopicStats = make(map[string]statistics.TopicStats, 0)
+	client.stats.TopicPartitionStats = make(map[string]statistics.TopicPartitionStats, 0)
+
 	return client, err
 }
 
@@ -313,6 +324,8 @@ func (client *KafkaClient) publishEvent(ctx context.Context, topic, eventName st
 
 	for e := range writer.Events() {
 		switch ev := e.(type) {
+		case *kafka.Stats:
+			go client.processStats(ev.String())
 		case *kafka.Message:
 			if ev.TopicPartition.Error != nil {
 				return ev.TopicPartition.Error
@@ -615,10 +628,80 @@ func (client *KafkaClient) readMessages(reader *kafka.Consumer) (*kafka.Message,
 		case kafka.Error:
 			return nil, e
 		case *kafka.Stats:
-			fmt.Println("STATS: ", ev.String())
+			go client.processStats(e.String())
 		default:
 		}
 	}
+}
+
+func (client *KafkaClient) processStats(stats string) {
+	var kafkaStats statistics.KafkaStats
+	json.Unmarshal([]byte(stats), &kafkaStats)
+
+	client.statsLock.Lock()
+	defer client.statsLock.Unlock()
+
+	client.stats.TopLevelStats.RebalanceCount = kafkaStats.Cgrp.RebalanceCnt
+
+	for k, b := range kafkaStats.Brokers {
+		if k == "GroupCoordinator" {
+			continue
+		}
+		client.stats.BrokerStats[k] = statistics.BrokerStats{
+			Timeouts:  b.ReqTimeouts,
+			Connects:  b.Connects,
+			Writes:    b.Tx,
+			TxErrors:  b.Txerrs,
+			TxRetries: b.Txretries,
+			WriteTime: statistics.DurationSummary{
+				Avg:   time.Duration(b.OutbufLatency.Avg) * time.Microsecond,
+				Min:   time.Duration(b.OutbufLatency.Min) * time.Microsecond,
+				Max:   time.Duration(b.OutbufLatency.Max) * time.Microsecond,
+				Count: b.OutbufLatency.Cnt,
+				Sum:   time.Duration(b.OutbufLatency.Sum) * time.Microsecond,
+			},
+			RxErrors: b.Rxerrs,
+		}
+	}
+
+	for k, t := range kafkaStats.Topics {
+		client.stats.TopicStats[k] = statistics.TopicStats{
+			BatchSize: statistics.Summary{
+				Avg:   t.Batchcnt.Avg,
+				Min:   t.Batchcnt.Min,
+				Max:   t.Batchcnt.Max,
+				Count: t.Batchcnt.Cnt,
+				Sum:   t.Batchcnt.Sum,
+			},
+			BatchBytes: statistics.Summary{
+				Avg:   t.Batchsize.Avg,
+				Min:   t.Batchsize.Min,
+				Max:   t.Batchsize.Max,
+				Count: t.Batchsize.Cnt,
+				Sum:   t.Batchsize.Sum,
+			},
+		}
+
+		for pKey, p := range t.Partitions {
+			if pKey == "-1" {
+				continue
+			}
+			client.stats.TopicPartitionStats[topicPartitionStatsKey(k, pKey)] = statistics.TopicPartitionStats{
+				TxMessages:      p.Txmsgs,
+				TxBytes:         p.Txbytes,
+				RxMessages:      p.Rxmsgs,
+				RxBytes:         p.Rxbytes,
+				CommittedOffset: p.CommittedOffset,
+				Lag:             p.ConsumerLag,
+				QueueLength:     p.FetchqCnt,
+				QueueCapacity:   p.FetchqSize,
+			}
+		}
+	}
+}
+
+func topicPartitionStatsKey(topic string, partition string) string {
+	return fmt.Sprintf("%s@%s", topic, partition)
 }
 
 func asyncCommitMessages(consumer *kafka.Consumer, message *kafka.Message) {
@@ -817,42 +900,12 @@ func loadAuditEnv() {
 	}
 }
 
-// GetWriterStats per topic
-func (client *KafkaClient) GetWriterStats() (stats []map[string]interface{}, topics []string) {
-	client.WritersLock.RLock()
-	defer client.WritersLock.RUnlock()
-
-	stats = make([]map[string]interface{}, 0, len(client.writers))
-	topics = make([]string, 0, len(client.writers))
-	for _, writer := range client.writers {
-		if writer == nil {
-			continue
-		}
-
-		//todo: get topic and writer stats
-		topics = append(topics, "")
-		stats = append(stats, nil)
-	}
-	return stats, topics
-}
-
-// GetReaderStats returns stats for each subscriber, and its topic, eventName and groupID.
-func (client *KafkaClient) GetReaderStats() (stats []map[string]interface{}, slugs []string) {
-	client.ReadersLock.RLock()
-	defer client.ReadersLock.RUnlock()
-
-	stats = make([]map[string]interface{}, 0, len(client.readers))
-	slugs = make([]string, 0, len(client.readers))
-	for slug, reader := range client.readers {
-		if reader == nil {
-			continue
-		}
-		slugs = append(slugs, slug)
-
-		//todo: get reader stats
-		stats = append(stats, nil)
-	}
-	return stats, slugs
+// GetStats returns the internal statistics of brokers, topics, and partitions.
+// The stats values are refreshed at a fixed interval which can be configured by setting the `statistics.interval.ms` config
+func (client *KafkaClient) GetStats() statistics.Stats {
+	client.statsLock.Lock()
+	defer client.statsLock.Unlock()
+	return client.stats.Copy()
 }
 
 func newPublishBackoff() *backoff.ExponentialBackOff {
