@@ -21,10 +21,12 @@ package kafkaprometheus
 	To enable, set the MetricsRegistry field on BrokerConfig when creating a kafka client.
 */
 import (
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/sirupsen/logrus"
 	"strings"
 	"time"
+
+	"github.com/AccelByte/eventstream-go-sdk/v3/statistics"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -35,8 +37,7 @@ const (
 const SlugSeparator = "$" // SlugSeparator is excluded by topicRegex.
 
 type KafkaStatCollector interface {
-	GetWriterStats() ([]map[string]interface{}, []string)
-	GetReaderStats() ([]map[string]interface{}, []string)
+	GetStats() statistics.Stats
 }
 
 func summaryCount(s *prometheus.SummaryVec, ss SummaryStats, labels ...string) prometheus.Metric {

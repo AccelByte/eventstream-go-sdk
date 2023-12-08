@@ -23,7 +23,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/AccelByte/eventstream-go-sdk/v3/pkg/kafkaprometheus"
+	"github.com/AccelByte/eventstream-go-sdk/v3/kafkaprometheus"
 	validator "github.com/AccelByte/justice-input-validation-go"
 	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
 	"github.com/prometheus/client_golang/prometheus"
