@@ -21,14 +21,9 @@ import (
 )
 
 type Stats struct {
-	TopLevelStats       TopLevelStats
 	BrokerStats         map[string]BrokerStats
 	TopicStats          map[string]TopicStats
 	TopicPartitionStats map[string]TopicPartitionStats
-}
-
-type TopLevelStats struct {
-	RebalanceCount int64
 }
 
 type BrokerStats struct {
@@ -46,6 +41,8 @@ type BrokerStats struct {
 }
 
 type TopicStats struct {
+	RebalanceCount int64
+
 	BatchSize  Summary // batchcnt
 	BatchBytes Summary // batchsize
 }
@@ -67,9 +64,6 @@ type TopicPartitionStats struct {
 func (s *Stats) Copy() Stats {
 	// deep copy stats
 	stats := Stats{
-		TopLevelStats: TopLevelStats{
-			RebalanceCount: s.TopLevelStats.RebalanceCount,
-		},
 		BrokerStats:         make(map[string]BrokerStats, 0),
 		TopicStats:          make(map[string]TopicStats, 0),
 		TopicPartitionStats: make(map[string]TopicPartitionStats, 0),
@@ -95,6 +89,7 @@ func (s *Stats) Copy() Stats {
 
 	for k, t := range s.TopicStats {
 		stats.TopicStats[k] = TopicStats{
+			RebalanceCount: t.RebalanceCount,
 			BatchSize: Summary{
 				Avg:   t.BatchSize.Avg,
 				Min:   t.BatchSize.Min,

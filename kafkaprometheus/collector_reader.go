@@ -34,7 +34,7 @@ var (
 	readerDials         = prometheus.NewCounterVec(prometheus.CounterOpts{Name: readerPrefix + "dials", Help: "Total number of dial attempts made by the reader."}, brokerLabels)
 	readerMessages      = prometheus.NewCounterVec(prometheus.CounterOpts{Name: readerPrefix + "messages", Help: "Total number of messages read by the reader."}, topicPartitionLabels)
 	readerBytes         = prometheus.NewCounterVec(prometheus.CounterOpts{Name: readerPrefix + "message_bytes", Help: "Total number of bytes read by the reader."}, topicPartitionLabels)
-	readerRebalances    = prometheus.NewCounterVec(prometheus.CounterOpts{Name: readerPrefix + "rebalances", Help: "Total number of times the reader has been rebalanced."}, []string{})
+	readerRebalances    = prometheus.NewCounterVec(prometheus.CounterOpts{Name: readerPrefix + "rebalances", Help: "Total number of times the reader has been rebalanced."}, topicLabels)
 	readerTimeouts      = prometheus.NewCounterVec(prometheus.CounterOpts{Name: readerPrefix + "timeouts", Help: "Total number of timeouts that occurred while reading."}, brokerLabels)
 	readerErrors        = prometheus.NewCounterVec(prometheus.CounterOpts{Name: readerPrefix + "error", Help: "Total number of errors encountered by the reader."}, brokerLabels)
 	readerOffset        = prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: readerPrefix + "offset", Help: "Current offset of the reader."}, topicPartitionLabels)
@@ -46,12 +46,14 @@ var (
 func (r *ReaderCollector) Collect(metrics chan<- prometheus.Metric) {
 	stats := r.Client.GetStats()
 
-	metrics <- counter(readerRebalances, stats.TopLevelStats.RebalanceCount)
-
 	for broker, b := range stats.BrokerStats {
 		metrics <- counter(readerDials, b.Connects, broker)
 		metrics <- counter(readerTimeouts, b.Timeouts, broker)
 		metrics <- counter(readerErrors, b.RxErrors, broker)
+	}
+
+	for topic, t := range stats.TopicStats {
+		metrics <- counter(readerRebalances, t.RebalanceCount, topic)
 	}
 
 	for topicPartition, p := range stats.TopicPartitionStats {
@@ -63,10 +65,10 @@ func (r *ReaderCollector) Collect(metrics chan<- prometheus.Metric) {
 		partition := split[1]
 		metrics <- counter(readerMessages, p.RxMessages, topic, partition)
 		metrics <- counter(readerBytes, p.RxBytes, topic, partition)
-		metrics <- gauge(readerOffset, float64(p.CommittedOffset), topic, partition)      // partitions.[n].committed_offset
-		metrics <- gauge(readerLag, float64(p.Lag), topic, partition)                     // partitions.[n].consumer_lag
-		metrics <- gauge(readerQueueLength, float64(p.QueueLength), topic, partition)     // partitions.[n].fetchq_cnt
-		metrics <- gauge(readerQueueCapacity, float64(p.QueueCapacity), topic, partition) // partitions.[n].fetchq_size
+		metrics <- gauge(readerOffset, float64(p.CommittedOffset), topic, partition)
+		metrics <- gauge(readerLag, float64(p.Lag), topic, partition)
+		metrics <- gauge(readerQueueLength, float64(p.QueueLength), topic, partition)
+		metrics <- gauge(readerQueueCapacity, float64(p.QueueCapacity), topic, partition)
 	}
 }
 

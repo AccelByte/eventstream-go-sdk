@@ -325,7 +325,7 @@ func (client *KafkaClient) publishEvent(ctx context.Context, topic, eventName st
 	for e := range writer.Events() {
 		switch ev := e.(type) {
 		case *kafka.Stats:
-			go client.processStats(ev.String())
+			go client.processStatsEvent(ev.String())
 		case *kafka.Message:
 			if ev.TopicPartition.Error != nil {
 				return ev.TopicPartition.Error
@@ -508,7 +508,18 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 		return err
 	}
 
-	err = reader.SubscribeTopics([]string{topic}, nil)
+	err = reader.SubscribeTopics([]string{topic}, func(consumer *kafka.Consumer, event kafka.Event) error {
+		if (strings.HasPrefix(event.String(), "AssignedPartitions") ||
+			strings.HasPrefix(event.String(), "RevokedPartitions")) &&
+			(strings.Contains(event.String(), topic)) {
+			client.statsLock.Lock()
+			defer client.statsLock.Unlock()
+			s := client.stats.TopicStats[topic]
+			s.RebalanceCount++
+			client.stats.TopicStats[topic] = s
+		}
+		return nil
+	})
 	if err != nil {
 		return err
 	}
@@ -628,20 +639,18 @@ func (client *KafkaClient) readMessages(reader *kafka.Consumer) (*kafka.Message,
 		case kafka.Error:
 			return nil, e
 		case *kafka.Stats:
-			go client.processStats(e.String())
+			go client.processStatsEvent(e.String())
 		default:
 		}
 	}
 }
 
-func (client *KafkaClient) processStats(stats string) {
+func (client *KafkaClient) processStatsEvent(statsEvent string) {
 	var kafkaStats statistics.KafkaStats
-	json.Unmarshal([]byte(stats), &kafkaStats)
+	json.Unmarshal([]byte(statsEvent), &kafkaStats)
 
 	client.statsLock.Lock()
 	defer client.statsLock.Unlock()
-
-	client.stats.TopLevelStats.RebalanceCount = kafkaStats.Cgrp.RebalanceCnt
 
 	for k, b := range kafkaStats.Brokers {
 		if k == "GroupCoordinator" {
@@ -698,6 +707,8 @@ func (client *KafkaClient) processStats(stats string) {
 			}
 		}
 	}
+
+	fmt.Printf("\n\nWKWK STATS %+v\n\n", client.stats)
 }
 
 func topicPartitionStatsKey(topic string, partition string) string {
