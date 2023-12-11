@@ -333,7 +333,7 @@ type SubscribeBuilder struct {
 func NewSubscribe() *SubscribeBuilder {
 	return &SubscribeBuilder{
 		ctx:    context.Background(),
-		offset: int64(kafka.OffsetEnd), //todo double check
+		offset: int64(kafka.OffsetEnd),
 	}
 }
 
@@ -398,6 +398,7 @@ func (s *SubscribeBuilder) SendErrorDLQ(dlq bool) *SubscribeBuilder {
 }
 
 // AsyncCommitMessage to asynchronously commit message offset.
+// This setting will be overridden by AutoCommitInterval on BrokerConfig
 func (s *SubscribeBuilder) AsyncCommitMessage(async bool) *SubscribeBuilder {
 	s.asyncCommitMessage = async
 	return s
