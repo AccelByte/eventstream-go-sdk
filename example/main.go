@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/AccelByte/eventstream-go-sdk/v3"
+	"github.com/AccelByte/eventstream-go-sdk/v4"
 	"github.com/sirupsen/logrus"
 )
 
@@ -37,8 +37,6 @@ func main() {
 	config := &eventstream.BrokerConfig{
 		StrictValidation: true,
 		DialTimeout:      0,
-		ReadTimeout:      0,
-		WriteTimeout:     0,
 	}
 
 	prefix := "example"

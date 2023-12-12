@@ -1,5 +1,5 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="Test All" type="GoTestRunConfiguration" factoryName="Go Test" singleton="false">
+  <configuration default="false" name="Test All (v4)" type="GoTestRunConfiguration" factoryName="Go Test" singleton="false">
     <module name="eventstream-go-sdk" />
     <working_directory value="$PROJECT_DIR$" />
     <EXTENSION ID="net.ashald.envfile">
@@ -13,7 +13,7 @@
       </ENTRIES>
     </EXTENSION>
     <kind value="PACKAGE" />
-    <package value="github.com/AccelByte/eventstream-go-sdk/v3" />
+    <package value="github.com/AccelByte/eventstream-go-sdk/v4" />
     <directory value="$PROJECT_DIR$" />
     <filePath value="$PROJECT_DIR$/" />
     <framework value="gotest" />
