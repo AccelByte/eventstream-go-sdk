@@ -35,10 +35,7 @@ import (
 )
 
 const (
-	defaultReaderSize       = 10e6 // 10MB
 	maxBackOffCount         = 4
-	kafkaMaxWait            = time.Second // (for consumer message batching)
-	saslScramAuth           = "SASL-SCRAM"
 	defaultPublishTimeoutMs = 60000 // 60 second
 
 	auditLogTopicEnvKey  = "APP_EVENT_STREAM_AUDIT_LOG_TOPIC"
@@ -580,16 +577,8 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 				}
 
 				if !client.autoCommitIntervalEnabled && client.commitBeforeMessage {
-					_, err = reader.CommitMessage(consumerMessage)
-					//todo: handle returned topic partition
-					if err != nil {
-						if subscribeBuilder.ctx.Err() == nil {
-							// the subscription is shutting down. triggered by an external context cancellation
-							loggerFields.Warn("triggered an external context cancellation. Cancelling the subscription")
-							continue
-						}
-
-						loggerFields.Error("unable to commit the event: ", err)
+					if err = client.commitMessage(consumerMessage, reader, subscribeBuilder); err != nil {
+						continue
 					}
 				}
 
@@ -602,22 +591,10 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 
 					return
 				}
-				if !client.autoCommitIntervalEnabled && !client.commitBeforeMessage {
-					if subscribeBuilder.asyncCommitMessage {
-						// Asynchronously commit the offset
-						go asyncCommitMessages(reader, consumerMessage)
-					} else {
-						_, err = reader.CommitMessage(consumerMessage)
-						//todo: handle returned topic partition
-						if err != nil {
-							if subscribeBuilder.ctx.Err() == nil {
-								// the subscription is shutting down. triggered by an external context cancellation
-								loggerFields.Warn("triggered an external context cancellation. Cancelling the subscription")
-								continue
-							}
 
-							loggerFields.Error("unable to commit the event: ", err)
-						}
+				if !client.autoCommitIntervalEnabled && !client.commitBeforeMessage {
+					if err = client.commitMessage(consumerMessage, reader, subscribeBuilder); err != nil {
+						continue
 					}
 				}
 			}
@@ -707,15 +684,36 @@ func (client *KafkaClient) processStatsEvent(statsEvent string) {
 			}
 		}
 	}
+}
 
-	fmt.Printf("\n\nWKWK STATS %+v\n\n", client.stats)
+func (client *KafkaClient) commitMessage(message *kafka.Message, reader *kafka.Consumer, subscribeBuilder *SubscribeBuilder) error {
+	if subscribeBuilder.asyncCommitMessage {
+		// Asynchronously commit the offset
+		go asyncCommitMessage(reader, message)
+	} else {
+		_, err := reader.CommitMessage(message)
+		if err != nil {
+			if subscribeBuilder.ctx.Err() == nil {
+				// the subscription is shutting down. triggered by an external context cancellation
+				logrus.
+					WithField("Topic Name", subscribeBuilder.topic).
+					WithField("Event Name", subscribeBuilder.eventName).Warn("triggered an external context cancellation. Cancelling the subscription")
+				return err
+			}
+			logrus.
+				WithField("Topic Name", subscribeBuilder.topic).
+				WithField("Event Name", subscribeBuilder.eventName).Error("unable to commit the event: ", err)
+			return err
+		}
+	}
+	return nil
 }
 
 func topicPartitionStatsKey(topic string, partition string) string {
 	return fmt.Sprintf("%s@%s", topic, partition)
 }
 
-func asyncCommitMessages(consumer *kafka.Consumer, message *kafka.Message) {
+func asyncCommitMessage(consumer *kafka.Consumer, message *kafka.Message) {
 	if _, err := consumer.CommitMessage(message); err != nil {
 		logrus.Error("unable to async commit the event: ", err)
 	}

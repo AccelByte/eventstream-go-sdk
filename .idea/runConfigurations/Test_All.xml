@@ -12,11 +12,11 @@
         <ENTRY IS_ENABLED="true" PARSER="runconfig" />
       </ENTRIES>
     </EXTENSION>
-    <framework value="gotest" />
-    <kind value="DIRECTORY" />
-    <package value="github.com/AccelByte/eventstream-go-sdk" />
+    <kind value="PACKAGE" />
+    <package value="github.com/AccelByte/eventstream-go-sdk/v3" />
     <directory value="$PROJECT_DIR$" />
     <filePath value="$PROJECT_DIR$/" />
+    <framework value="gotest" />
     <method v="2" />
   </configuration>
 </component>
