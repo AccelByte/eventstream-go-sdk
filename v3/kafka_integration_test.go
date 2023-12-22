@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/mitchellh/mapstructure"
+	"github.com/segmentio/kafka-go"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -53,6 +54,9 @@ func createKafkaClient(t *testing.T) Client {
 		CACertFile:       "",
 		StrictValidation: true,
 		DialTimeout:      2 * time.Second,
+		ReadTimeout:      2 * time.Second,
+		WriteTimeout:     2 * time.Second,
+		BaseWriterConfig: &kafka.WriterConfig{BatchSize: 5},
 	}
 
 	brokerList := []string{"localhost:9092"}
@@ -68,6 +72,8 @@ func createInvalidKafkaClient(t *testing.T) Client {
 		CACertFile:       "",
 		StrictValidation: true,
 		DialTimeout:      time.Second,
+		ReadTimeout:      time.Second,
+		WriteTimeout:     time.Second,
 	}
 
 	brokerList := []string{"invalidbroker:9092"}
@@ -209,7 +215,7 @@ func TestKafkaPubSubSuccess(t *testing.T) {
 }
 
 // nolint dupl
-func TestKafkaGroupIDNotSpecifiedSuccess(t *testing.T) {
+func TestKafkaNonConsumerGroupSuccess(t *testing.T) {
 	t.Parallel()
 	ctx, done := context.WithTimeout(context.Background(), time.Duration(timeoutTest)*time.Second)
 	defer done()
@@ -358,6 +364,7 @@ func TestKafkaGroupIDNotSpecifiedSuccess(t *testing.T) {
 			TargetNamespace(mockEvent.TargetNamespace).
 			Privacy(mockEvent.Privacy).
 			AdditionalFields(mockEvent.AdditionalFields).
+			//Timeout(time.Second).
 			Key(testKey).
 			Payload(mockPayload))
 	if err != nil {
@@ -469,6 +476,183 @@ func TestKafkaPubFailed(t *testing.T) {
 		return
 	case <-ctx.Done():
 		assert.FailNow(t, errorTimeout)
+	}
+}
+
+// nolint dupl
+func TestKafkaPubSubMultipleTopicSuccess(t *testing.T) {
+	t.Parallel()
+	ctx, done := context.WithTimeout(context.Background(), time.Duration(timeoutTest)*time.Second)
+	defer done()
+
+	doneChan := make(chan bool, 2)
+
+	client := createKafkaClient(t)
+
+	topicName1, topicName2 := constructTopicTest(), constructTopicTest()
+
+	var mockPayload = make(map[string]interface{})
+	mockPayload[testPayload] = Payload{FriendID: "user456"}
+
+	mockAdditionalFields := map[string]interface{}{
+		"summary": "user:_failed",
+	}
+
+	mockEvent := &Event{
+		EventName:        "testEvent",
+		Namespace:        "event",
+		ClientID:         "fe5bd0e3dc184d2d8ae0e09fcedf0f51",
+		TraceID:          "882da8cddd174d12af25da6310b47bd5",
+		SpanContext:      "test-span-context",
+		UserID:           "48bf8a020b584f31bc605bf65d3300ed",
+		SessionID:        "c1ab4f754acc4cb48a8f68dd25cfca21",
+		EventID:          3,
+		EventType:        301,
+		EventLevel:       3,
+		ServiceName:      "test",
+		ClientIDs:        []string{"7d480ce0e8624b02901bd80d9ba9817c"},
+		TargetUserIDs:    []string{"1fe7f425a0e049d29d87ca3d32e45b5a"},
+		TargetNamespace:  "publisher",
+		Privacy:          true,
+		AdditionalFields: mockAdditionalFields,
+		Version:          2,
+		Payload:          mockPayload,
+	}
+
+	err := client.Register(
+		NewSubscribe().
+			Topic(topicName1).
+			EventName(mockEvent.EventName).
+			GroupID(generateID()).
+			Offset(0).
+			Context(ctx).
+			Callback(func(ctx context.Context, event *Event, err error) error {
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
+
+				var eventPayload Payload
+				if err != nil {
+					assert.Fail(t, "error when run callback 1")
+				}
+				if err = mapstructure.Decode(event.Payload[testPayload], &eventPayload); err != nil {
+					assert.Fail(t, "unable to decode payload")
+				}
+				assert.Equal(t, mockEvent.EventName, event.EventName, "event name should be equal")
+				assert.Equal(t, mockEvent.Namespace, event.Namespace, "namespace should be equal")
+				assert.Equal(t, mockEvent.ClientID, event.ClientID, "client ID should be equal")
+				assert.Equal(t, mockEvent.TraceID, event.TraceID, "trace ID should be equal")
+				assert.Equal(t, mockEvent.SpanContext, event.SpanContext, "span context should be equal")
+				assert.Equal(t, mockEvent.UserID, event.UserID, "user ID should be equal")
+				assert.Equal(t, mockEvent.SessionID, event.SessionID, "session ID should be equal")
+				assert.Equal(t, mockEvent.EventID, event.EventID, "EventID should be equal")
+				assert.Equal(t, mockEvent.EventType, event.EventType, "EventType should be equal")
+				assert.Equal(t, mockEvent.EventLevel, event.EventLevel, "EventLevel should be equal")
+				assert.Equal(t, mockEvent.ServiceName, event.ServiceName, "ServiceName should be equal")
+				assert.Equal(t, mockEvent.ClientIDs, event.ClientIDs, "ClientIDs should be equal")
+				assert.Equal(t, mockEvent.TargetUserIDs, event.TargetUserIDs, "TargetUserIDs should be equal")
+				assert.Equal(t, mockEvent.TargetNamespace, event.TargetNamespace, "TargetNamespace should be equal")
+				assert.Equal(t, mockEvent.Privacy, event.Privacy, "Privacy should be equal")
+				assert.Equal(t, mockEvent.AdditionalFields, event.AdditionalFields, "AdditionalFields should be equal")
+				assert.Equal(t, mockEvent.Version, event.Version, "version should be equal")
+				if validPayload := reflect.DeepEqual(mockEvent.Payload[testPayload].(Payload), eventPayload); !validPayload {
+					assert.Fail(t, "payload should be equal")
+				}
+				doneChan <- true
+
+				return nil
+			}))
+	if err != nil {
+		assert.Fail(t, errorSubscribe, err)
+		return
+	}
+
+	err = client.Register(
+		NewSubscribe().
+			Topic(topicName2).
+			EventName(mockEvent.EventName).
+			GroupID(generateID()).
+			Offset(0).
+			Context(ctx).
+			Callback(func(ctx context.Context, event *Event, err error) error {
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
+
+				var eventPayload Payload
+				if err != nil {
+					assert.Fail(t, "error when run callback 2")
+				}
+				if err = mapstructure.Decode(event.Payload[testPayload], &eventPayload); err != nil {
+					assert.Fail(t, "unable to decode payload")
+				}
+				assert.Equal(t, mockEvent.EventName, event.EventName, "event name should be equal")
+				assert.Equal(t, mockEvent.Namespace, event.Namespace, "namespace should be equal")
+				assert.Equal(t, mockEvent.ClientID, event.ClientID, "client ID should be equal")
+				assert.Equal(t, mockEvent.TraceID, event.TraceID, "trace ID should be equal")
+				assert.Equal(t, mockEvent.SpanContext, event.SpanContext, "span context should be equal")
+				assert.Equal(t, mockEvent.UserID, event.UserID, "user ID should be equal")
+				assert.Equal(t, mockEvent.SessionID, event.SessionID, "session ID should be equal")
+				assert.Equal(t, mockEvent.EventID, event.EventID, "EventID should be equal")
+				assert.Equal(t, mockEvent.EventType, event.EventType, "EventType should be equal")
+				assert.Equal(t, mockEvent.EventLevel, event.EventLevel, "EventLevel should be equal")
+				assert.Equal(t, mockEvent.ServiceName, event.ServiceName, "ServiceName should be equal")
+				assert.Equal(t, mockEvent.ClientIDs, event.ClientIDs, "ClientIDs should be equal")
+				assert.Equal(t, mockEvent.TargetUserIDs, event.TargetUserIDs, "TargetUserIDs should be equal")
+				assert.Equal(t, mockEvent.TargetNamespace, event.TargetNamespace, "TargetNamespace should be equal")
+				assert.Equal(t, mockEvent.Privacy, event.Privacy, "Privacy should be equal")
+				assert.Equal(t, mockEvent.AdditionalFields, event.AdditionalFields, "AdditionalFields should be equal")
+				assert.Equal(t, mockEvent.Version, event.Version, "version should be equal")
+				if validPayload := reflect.DeepEqual(mockEvent.Payload[testPayload].(Payload), eventPayload); !validPayload {
+					assert.Fail(t, "payload should be equal")
+				}
+				doneChan <- true
+
+				return nil
+			}))
+	if err != nil {
+		assert.Fail(t, errorSubscribe, err)
+		return
+	}
+
+	err = client.Publish(
+		NewPublish().
+			Topic(topicName1, topicName2).
+			EventName(mockEvent.EventName).
+			Namespace(mockEvent.Namespace).
+			ClientID(mockEvent.ClientID).
+			UserID(mockEvent.UserID).
+			SessionID(mockEvent.SessionID).
+			TraceID(mockEvent.TraceID).
+			SpanContext(mockEvent.SpanContext).
+			EventID(mockEvent.EventID).
+			EventType(mockEvent.EventType).
+			EventLevel(mockEvent.EventLevel).
+			ServiceName(mockEvent.ServiceName).
+			ClientIDs(mockEvent.ClientIDs).
+			TargetUserIDs(mockEvent.TargetUserIDs).
+			TargetNamespace(mockEvent.TargetNamespace).
+			Privacy(mockEvent.Privacy).
+			AdditionalFields(mockEvent.AdditionalFields).
+			Version(2).
+			Context(context.Background()).
+			Payload(mockPayload))
+	if err != nil {
+		assert.Fail(t, errorPublish, err)
+		return
+	}
+
+	doneItr := 0
+	for {
+		select {
+		case <-doneChan:
+			doneItr++
+			if doneItr == 2 {
+				return
+			}
+		case <-ctx.Done():
+			assert.FailNow(t, errorTimeout)
+		}
 	}
 }
 

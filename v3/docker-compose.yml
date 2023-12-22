@@ -40,6 +40,15 @@ services:
     networks:
       - resource-network
 
+  ui:
+    image: obsidiandynamics/kafdrop:3.26.0
+    ports:
+      - "9000:9000"
+    environment:
+      - KAFKA_BROKERCONNECT=kafka:9092
+    networks:
+      - resource-network
+
 networks:
   resource-network:
     driver: bridge

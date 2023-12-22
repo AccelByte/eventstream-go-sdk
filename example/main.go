@@ -19,24 +19,83 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/AccelByte/eventstream-go-sdk/v3"
-	"github.com/google/uuid"
+	"time"
+
+	"github.com/AccelByte/eventstream-go-sdk/v4"
 	"github.com/sirupsen/logrus"
-	"strings"
 )
+
+type Payload struct {
+	FriendID string `json:"friendId"`
+}
 
 // nolint: funlen
 func main() {
+
+	logrus.SetLevel(logrus.DebugLevel)
+
 	config := &eventstream.BrokerConfig{
 		StrictValidation: true,
 		DialTimeout:      0,
-		ReadTimeout:      0,
-		WriteTimeout:     0,
 	}
 
 	prefix := "example"
 
-	client, err := eventstream.NewClient(prefix, "stdout", nil, config)
+	client, err := eventstream.NewClient(prefix, "kafka", []string{"localhost:9092"}, config)
+	if err != nil {
+		logrus.Error(err)
+	}
+
+	var mockPayload = make(map[string]interface{})
+	mockPayload["testPayload"] = Payload{FriendID: "user456"}
+
+	mockAdditionalFields := map[string]interface{}{
+		"summary": "user:_failed",
+	}
+
+	mockEvent := &eventstream.Event{
+		EventName:        "testEvent",
+		Namespace:        "event",
+		ClientID:         "fe5bd0e3dc184d2d8ae0e09fcedf0f51",
+		TraceID:          "882da8cddd174d12af25da6310b47bd5",
+		SpanContext:      "test-span-context",
+		UserID:           "48bf8a020b584f31bc605bf65d3300ed",
+		SessionID:        "c1ab4f754acc4cb48a8f68dd25cfca21",
+		EventID:          3,
+		EventType:        301,
+		EventLevel:       3,
+		ServiceName:      "test",
+		ClientIDs:        []string{"7d480ce0e8624b02901bd80d9ba9817c"},
+		TargetUserIDs:    []string{"1fe7f425a0e049d29d87ca3d32e45b5a"},
+		TargetNamespace:  "publisher",
+		Privacy:          true,
+		AdditionalFields: mockAdditionalFields,
+		Version:          2,
+		Payload:          mockPayload,
+	}
+
+	err = client.Publish(eventstream.NewPublish().
+		Topic("topic").
+		EventName(mockEvent.EventName).
+		Namespace(mockEvent.Namespace).
+		ClientID(mockEvent.ClientID).
+		UserID(mockEvent.UserID).
+		SessionID(mockEvent.SessionID).
+		TraceID(mockEvent.TraceID).
+		SpanContext(mockEvent.SpanContext).
+		EventID(mockEvent.EventID).
+		EventType(mockEvent.EventType).
+		EventLevel(mockEvent.EventLevel).
+		ServiceName(mockEvent.ServiceName).
+		ClientIDs(mockEvent.ClientIDs).
+		TargetUserIDs(mockEvent.TargetUserIDs).
+		TargetNamespace(mockEvent.TargetNamespace).
+		Privacy(mockEvent.Privacy).
+		AdditionalFields(mockEvent.AdditionalFields).
+		Version(2).
+		Context(context.Background()).
+		Payload(mockPayload).
+		Timeout(time.Millisecond * 1))
 	if err != nil {
 		logrus.Error(err)
 	}
@@ -46,6 +105,7 @@ func main() {
 			EventName("eventName").
 			Topic("topic").
 			Context(context.Background()).
+			GroupID("groupid").
 			Callback(func(ctx context.Context, event *eventstream.Event, err error) error {
 				if err != nil {
 					logrus.Error(err)
@@ -53,93 +113,14 @@ func main() {
 				fmt.Printf("%+v", event)
 
 				return nil
-			}))
+			}).
+			SendErrorDLQ(true).
+			AsyncCommitMessage(true))
 
 	if err != nil {
 		logrus.Error(err)
 	}
 
-	err = client.Publish(
-		eventstream.NewPublish().
-			Topic("topic").
-			EventName("eventName").
-			Namespace("namespace").
-			ClientID("682af5a46e934a42b798bb4afb9a973e").
-			UserID("e635e94c2afb408c9427f143b293a3c7").
-			SessionID("9428c3dd028849cf84c1a763e1b7ea71").
-			TraceID("f75368ef5603402ca98af501304949c0").
-			Version(1). // nolint: gomnd
-			Context(context.Background()).
-			Payload(map[string]interface{}{
-				"payload1": struct {
-					Field1 string
-					Field2 string
-				}{
-					Field1: "value1",
-					Field2: "value2",
-				},
-				"payload2": struct {
-					Field3 string
-					Field4 string
-				}{
-					Field3: "value3",
-					Field4: "value4",
-				},
-			}))
-
-	if err != nil {
-		logrus.Error(err)
-	}
-
-	err = client.Register(
-		eventstream.NewSubscribe().
-			EventName("auditLog").
-			Topic("auditLog").
-			Context(context.Background()).
-			CallbackRaw(func(ctx context.Context, msgValue []byte, err error) error {
-				if err != nil {
-					logrus.Error(err)
-				}
-				fmt.Println("-----------------------audit log received-----------------------")
-				fmt.Printf("%+v", string(msgValue))
-
-				return nil
-			}))
-
-	if err != nil {
-		logrus.Error(err)
-	}
-
-	auditLogContent := make(map[string]interface{})
-	auditLogContent["platformId"] = "steam"
-	auditLogContent["secret"] = "steam_secret"
-	auditLogDiff := eventstream.AuditLogDiff{}
-	auditLogDiff.After = make(map[string]interface{})
-	auditLogDiff.Before = make(map[string]interface{})
-	auditLogDiff.Before["before"] = "before"
-	auditLogDiff.After["after"] = "after"
-	err = client.PublishAuditLog(
-		eventstream.NewAuditLogBuilder().
-			Category("test_category").
-			ActionName("test_action").
-			IP("127.0.0.1").
-			Actor(strings.Replace(uuid.New().String(), "-", "", -1)).
-			IsActorTypeUser(true).
-			ClientID(strings.Replace(uuid.New().String(), "-", "", -1)).
-			ActorNamespace("test_namespace").
-			ObjectID(strings.Replace(uuid.New().String(), "-", "", -1)).
-			ObjectType("User").
-			ObjectNamespace("test_object_namespace").
-			TargetUserID(strings.Replace(uuid.New().String(), "-", "", -1)).
-			DeviceID("test_device").
-			Content(auditLogContent).
-			Diff(&auditLogDiff).
-			ErrorCallback(func(message []byte, err error) {
-				fmt.Printf("message: %s", string(message))
-			}),
-	)
-	if err != nil {
-		logrus.Error(err)
-	}
+	time.Sleep(time.Hour * 4)
 
 }
