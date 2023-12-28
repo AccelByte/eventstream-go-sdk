@@ -1063,6 +1063,21 @@ func TestKafkaUnregisterTopicSuccess(t *testing.T) {
 	}
 }
 
+func TestKafkaGetMetadata(t *testing.T) {
+	t.Parallel()
+	ctx, done := context.WithTimeout(context.Background(), time.Duration(timeoutTest)*time.Second)
+	defer done()
+
+	logrus.SetLevel(logrus.DebugLevel)
+
+	client := createKafkaClient(t)
+
+	deadline, _ := ctx.Deadline()
+	metadata, err := client.GetMetadata("", time.Until(deadline))
+	require.NoError(t, err)
+	assert.NotEmpty(t, metadata.Brokers[0].ID)
+}
+
 func callerFuncName() string {
 	pc, _, _, _ := runtime.Caller(2)
 	callerFunc := runtime.FuncForPC(pc)

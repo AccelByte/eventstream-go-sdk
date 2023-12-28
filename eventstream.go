@@ -426,6 +426,7 @@ type Client interface {
 	PublishSync(publishBuilder *PublishBuilder) error
 	Register(subscribeBuilder *SubscribeBuilder) error
 	PublishAuditLog(auditLogBuilder *AuditLogBuilder) error
+	GetMetadata(topic string, timeout time.Duration) (*Metadata, error)
 }
 
 type AuditLog struct {
