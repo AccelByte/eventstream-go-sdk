@@ -85,6 +85,8 @@ type KafkaClient struct {
 	// current topic subscribed on the kafka client
 	topicSubscribedCount map[string]int
 
+	adminClient *kafka.AdminClient
+
 	stats statistics.Stats
 
 	statsLock sync.RWMutex
@@ -960,4 +962,56 @@ func newPublishBackoff() *backoff.ExponentialBackOff {
 	// For maxBackoffCount=4 we will get attempts: 0ms, 500ms, 2s, 8s, 16s.
 	backoff.Multiplier = 4.0
 	return backoff
+}
+
+func (client *KafkaClient) getAdminClient(config *kafka.ConfigMap) (*kafka.AdminClient, error) {
+	if client.adminClient != nil {
+		return client.adminClient, nil
+	}
+
+	adminClient, err := kafka.NewAdminClient(config)
+	if err != nil {
+		return nil, err
+	}
+
+	return adminClient, nil
+}
+
+func (client *KafkaClient) GetMetadata(topic string, timeout time.Duration) (*Metadata, error) {
+	adminClient, err := client.getAdminClient(client.configMap)
+	if err != nil {
+		return nil, err
+	}
+
+	mTopic := &topic
+	if topic == "" {
+		mTopic = nil
+	}
+	metadata, err := adminClient.GetMetadata(mTopic, false, int(timeout.Milliseconds()))
+	if err != nil {
+		return nil, err
+	}
+
+	mBrokers := make([]BrokerMetadata, 0)
+	for _, m := range metadata.Brokers {
+		mBrokers = append(mBrokers, BrokerMetadata{
+			ID:   m.ID,
+			Host: m.Host,
+			Port: m.Port,
+		})
+	}
+
+	return &Metadata{
+		Brokers: mBrokers,
+	}, nil
+}
+
+type BrokerMetadata struct {
+	ID   int32
+	Host string
+	Port int
+}
+
+type Metadata struct {
+	Brokers []BrokerMetadata
 }
