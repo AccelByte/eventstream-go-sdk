@@ -18,8 +18,11 @@ package eventstream
 
 import (
 	"context"
+	"math/rand"
 	"testing"
+	"time"
 
+	"github.com/segmentio/kafka-go"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -328,4 +331,169 @@ func TestKafkaSubNilCallback(t *testing.T) {
 			Callback(nil))
 
 	assert.Equal(t, errInvalidCallback, err, "error should be equal")
+}
+
+var seededRand *rand.Rand = rand.New(
+	rand.NewSource(time.Now().UnixNano()))
+
+func randomString(length int) string {
+	charset := "abcdefghijklmnopqrstuvwxyz" +
+		"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	b := make([]byte, length)
+	for i := range b {
+		b[i] = charset[seededRand.Intn(len(charset))]
+	}
+	return string(b)
+}
+
+func makePayload(keyLength, messageLength int) map[string]interface{} {
+	ret := make(map[string]interface{})
+	for i := 0; i < keyLength; i++ {
+		ret[randomString(32)] = randomString(messageLength)
+	}
+	return ret
+}
+
+func TestKafkaMaxMessageSize(t *testing.T) {
+	t.Parallel()
+	client := createKafkaClient(t)
+	topicName := constructTopicTest()
+
+	testCases := []struct {
+		Payload map[string]interface{}
+		Err     error
+	}{
+		{Payload: makePayload(10, 1000), Err: nil},
+		{Payload: makePayload(2000, 1000), Err: errMessageTooLarge},
+	}
+
+	for _, testCase := range testCases {
+		var mockPayload = testCase.Payload
+
+		mockAdditionalFields := map[string]interface{}{
+			"summary": "user:_failed",
+		}
+
+		mockEvent := &Event{
+			EventName:        "testEvent",
+			Namespace:        "event",
+			ClientID:         "661a4ac82b854f3ca3ac2e0377d356e4",
+			TraceID:          "5005e27d01064f23b962e8fd2e560a8a",
+			SpanContext:      "test-span-context",
+			UserID:           "661a4ac82b854f3ca3ac2e0377d356e4",
+			EventID:          3,
+			EventType:        301,
+			EventLevel:       3,
+			ServiceName:      "test",
+			ClientIDs:        []string{"7d480ce0e8624b02901bd80d9ba9817c"},
+			TargetUserIDs:    []string{"1fe7f425a0e049d29d87ca3d32e45b5a"},
+			TargetNamespace:  "publisher",
+			Privacy:          true,
+			AdditionalFields: mockAdditionalFields,
+			Version:          2,
+			Payload:          mockPayload,
+		}
+
+		err := client.Publish(
+			NewPublish().
+				Topic(topicName).
+				EventName(mockEvent.EventName).
+				Namespace(mockEvent.Namespace).
+				ClientID(mockEvent.ClientID).
+				UserID(mockEvent.UserID).
+				SessionID(mockEvent.SessionID).
+				TraceID(mockEvent.TraceID).
+				SpanContext(mockEvent.SpanContext).
+				EventID(mockEvent.EventID).
+				EventType(mockEvent.EventType).
+				EventLevel(mockEvent.EventLevel).
+				ServiceName(mockEvent.ServiceName).
+				ClientIDs(mockEvent.ClientIDs).
+				TargetUserIDs(mockEvent.TargetUserIDs).
+				TargetNamespace(mockEvent.TargetNamespace).
+				Privacy(mockEvent.Privacy).
+				AdditionalFields(mockEvent.AdditionalFields).
+				Version(2).
+				Context(context.Background()).
+				Payload(mockPayload))
+
+		assert.Equal(t, testCase.Err, err)
+	}
+}
+
+func TestKafkaMaxMessageSizeModified(t *testing.T) {
+	t.Parallel()
+
+	config := &BrokerConfig{
+		CACertFile:       "",
+		StrictValidation: true,
+		DialTimeout:      2 * time.Second,
+		BaseWriterConfig: &kafka.WriterConfig{
+			BatchBytes: 4096,
+		},
+	}
+
+	brokerList := []string{"localhost:9092"}
+	client, _ := NewClient(prefix, eventStreamKafka, brokerList, config)
+	topicName := constructTopicTest()
+
+	testCases := []struct {
+		Payload map[string]interface{}
+		Err     error
+	}{
+		{Payload: makePayload(1, 1000), Err: nil},
+		{Payload: makePayload(10, 1000), Err: errMessageTooLarge},
+	}
+
+	for _, testCase := range testCases {
+		var mockPayload = testCase.Payload
+
+		mockAdditionalFields := map[string]interface{}{
+			"summary": "user:_failed",
+		}
+
+		mockEvent := &Event{
+			EventName:        "testEvent",
+			Namespace:        "event",
+			ClientID:         "661a4ac82b854f3ca3ac2e0377d356e4",
+			TraceID:          "5005e27d01064f23b962e8fd2e560a8a",
+			SpanContext:      "test-span-context",
+			UserID:           "661a4ac82b854f3ca3ac2e0377d356e4",
+			EventID:          3,
+			EventType:        301,
+			EventLevel:       3,
+			ServiceName:      "test",
+			ClientIDs:        []string{"7d480ce0e8624b02901bd80d9ba9817c"},
+			TargetUserIDs:    []string{"1fe7f425a0e049d29d87ca3d32e45b5a"},
+			TargetNamespace:  "publisher",
+			Privacy:          true,
+			AdditionalFields: mockAdditionalFields,
+			Version:          2,
+			Payload:          mockPayload,
+		}
+
+		err := client.Publish(
+			NewPublish().
+				Topic(topicName).
+				EventName(mockEvent.EventName).
+				Namespace(mockEvent.Namespace).
+				ClientID(mockEvent.ClientID).
+				UserID(mockEvent.UserID).
+				SessionID(mockEvent.SessionID).
+				TraceID(mockEvent.TraceID).
+				SpanContext(mockEvent.SpanContext).
+				EventID(mockEvent.EventID).
+				EventType(mockEvent.EventType).
+				EventLevel(mockEvent.EventLevel).
+				ServiceName(mockEvent.ServiceName).
+				ClientIDs(mockEvent.ClientIDs).
+				TargetUserIDs(mockEvent.TargetUserIDs).
+				TargetNamespace(mockEvent.TargetNamespace).
+				Privacy(mockEvent.Privacy).
+				AdditionalFields(mockEvent.AdditionalFields).
+				Version(2).
+				Context(context.Background()).
+				Payload(mockPayload))
+		assert.Equal(t, testCase.Err, err)
+	}
 }
