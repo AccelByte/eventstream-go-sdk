@@ -317,7 +317,7 @@ func (client *KafkaClient) PublishSync(publishBuilder *PublishBuilder) error {
 }
 
 func (client *KafkaClient) validateMessageSize(msg *kafka.Message) error {
-	maxSize := client.publishConfig.BatchSize
+	maxSize := client.publishConfig.BatchBytes
 	if maxSize <= 0 {
 		maxSize = 1048576 // default size from kafka in bytes
 	}
