@@ -44,13 +44,16 @@ const (
 	auditLogTopicEnvKey  = "APP_EVENT_STREAM_AUDIT_LOG_TOPIC"
 	auditLogEnableEnvKey = "APP_EVENT_STREAM_AUDIT_LOG_ENABLED"
 	auditLogTopicDefault = "auditLog"
+
+	messageAdditionalSizeApprox = 2048 // in Byte. Approx data added to message that sent to kafka
 )
 
 var (
-	auditLogTopic  = ""
-	auditEnabled   = true
-	errPubNilEvent = errors.New("unable to publish nil event")
-	errSubNilEvent = errors.New("unable to subscribe nil event")
+	auditLogTopic      = ""
+	auditEnabled       = true
+	errPubNilEvent     = errors.New("unable to publish nil event")
+	errSubNilEvent     = errors.New("unable to subscribe nil event")
+	errMessageTooLarge = errors.New("message to large")
 )
 
 // KafkaClient wraps client's functionality for Kafka
@@ -219,6 +222,10 @@ func (client *KafkaClient) Publish(publishBuilder *PublishBuilder) error {
 		return fmt.Errorf("unable to construct event : %s , error : %v", publishBuilder.eventName, err)
 	}
 
+	if err = client.validateMessageSize(&message); err != nil {
+		return err
+	}
+
 	config := client.publishConfig
 
 	if len(publishBuilder.topic) > 1 {
@@ -295,6 +302,10 @@ func (client *KafkaClient) PublishSync(publishBuilder *PublishBuilder) error {
 		return fmt.Errorf("unable to construct event : %s , error : %v", publishBuilder.eventName, err)
 	}
 
+	if err = client.validateMessageSize(&message); err != nil {
+		return err
+	}
+
 	config := client.publishConfig
 	if len(publishBuilder.topic) != 1 {
 		return fmt.Errorf("incorrect number of topics for sync publish")
@@ -303,6 +314,18 @@ func (client *KafkaClient) PublishSync(publishBuilder *PublishBuilder) error {
 	topic := constructTopic(client.prefix, publishBuilder.topic[0])
 
 	return client.publishEvent(publishBuilder.ctx, topic, publishBuilder.eventName, config, message)
+}
+
+func (client *KafkaClient) validateMessageSize(msg *kafka.Message) error {
+	maxSize := client.publishConfig.BatchSize
+	if maxSize <= 0 {
+		maxSize = 1048576 // default size from kafka in bytes
+	}
+	maxSize -= messageAdditionalSizeApprox
+	if len(msg.Key)+len(msg.Value) > maxSize {
+		return errMessageTooLarge
+	}
+	return nil
 }
 
 // Publish send event to a topic
