@@ -42,13 +42,16 @@ const (
 	auditLogTopicEnvKey  = "APP_EVENT_STREAM_AUDIT_LOG_TOPIC"
 	auditLogEnableEnvKey = "APP_EVENT_STREAM_AUDIT_LOG_ENABLED"
 	auditLogTopicDefault = "auditLog"
+
+	messageAdditionalSizeApprox = 2048 // in Byte. Approx data added to message that sent to kafka
 )
 
 var (
-	auditLogTopic  = ""
-	auditEnabled   = true
-	errPubNilEvent = errors.New("unable to publish nil event")
-	errSubNilEvent = errors.New("unable to subscribe nil event")
+	auditLogTopic      = ""
+	auditEnabled       = true
+	errPubNilEvent     = errors.New("unable to publish nil event")
+	errSubNilEvent     = errors.New("unable to subscribe nil event")
+	ErrMessageTooLarge = errors.New("message to large")
 )
 
 // KafkaClient wraps client's functionality for Kafka
@@ -217,6 +220,10 @@ func (client *KafkaClient) Publish(publishBuilder *PublishBuilder) error {
 		return fmt.Errorf("unable to construct event : %s , error : %v", publishBuilder.eventName, err)
 	}
 
+	if err = client.validateMessageSize(message); err != nil {
+		return err
+	}
+
 	config := client.configMap
 
 	if publishBuilder.timeout == 0 {
@@ -289,6 +296,10 @@ func (client *KafkaClient) PublishSync(publishBuilder *PublishBuilder) error {
 		return fmt.Errorf("unable to construct event : %s , error : %v", publishBuilder.eventName, err)
 	}
 
+	if err = client.validateMessageSize(message); err != nil {
+		return err
+	}
+
 	config := client.configMap
 
 	if publishBuilder.timeout == 0 {
@@ -303,6 +314,27 @@ func (client *KafkaClient) PublishSync(publishBuilder *PublishBuilder) error {
 	topic := constructTopic(client.prefix, publishBuilder.topic)
 
 	return client.publishEvent(publishBuilder.ctx, topic, publishBuilder.eventName, config, message)
+}
+
+func (client *KafkaClient) validateMessageSize(msg *kafka.Message) error {
+	maxSize := 1048576 // default size from kafka in bytes
+	if client.configMap != nil {
+		// https://github.com/confluentinc/librdkafka/blob/master/CONFIGURATION.md
+		if valInterface, ok := (*client.configMap)["message.max.bytes"]; ok {
+			if intValue, ok := valInterface.(int); ok {
+				maxSize = intValue
+			} else if intValue, ok := valInterface.(int32); ok {
+				maxSize = int(intValue)
+			} else if intValue, ok := valInterface.(int64); ok {
+				maxSize = int(intValue)
+			}
+		}
+	}
+	maxSize -= messageAdditionalSizeApprox
+	if len(msg.Key)+len(msg.Value) > maxSize {
+		return ErrMessageTooLarge
+	}
+	return nil
 }
 
 // Publish send event to a topic
