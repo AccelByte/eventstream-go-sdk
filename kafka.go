@@ -1005,8 +1005,9 @@ func (client *KafkaClient) getAdminClient(config *kafka.ConfigMap) (*kafka.Admin
 	if err != nil {
 		return nil, err
 	}
+	client.adminClient = adminClient
 
-	return adminClient, nil
+	return client.adminClient, nil
 }
 
 func (client *KafkaClient) GetMetadata(topic string, timeout time.Duration) (*Metadata, error) {
