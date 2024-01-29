@@ -214,6 +214,72 @@ func TestKafkaPubSubSuccess(t *testing.T) {
 	}
 }
 
+func TestKafkaPubSyncSuccess(t *testing.T) {
+	t.Parallel()
+
+	logrus.SetLevel(logrus.DebugLevel)
+
+	client := createKafkaClient(t)
+
+	topicName := constructTopicTest()
+
+	var mockPayload = make(map[string]interface{})
+	mockPayload[testPayload] = Payload{FriendID: fmt.Sprintf("user-%d", rand.Int63())}
+
+	mockAdditionalFields := map[string]interface{}{
+		"summary": "user:_failed",
+	}
+
+	mockEvent := &Event{
+		EventName:        fmt.Sprintf("testEvent-%d", rand.Int63()),
+		Namespace:        "event",
+		ClientID:         "7d480ce0e8624b02901bd80d9ba9817c",
+		TraceID:          "01c34ec3b07f4bfaa59ba0184a3de14d",
+		SpanContext:      "test-span-id",
+		UserID:           "e95b150043ff4a2c88427a6eb25e5bc8",
+		EventID:          3,
+		EventType:        301,
+		EventLevel:       3,
+		ServiceName:      "test",
+		ClientIDs:        []string{"7d480ce0e8624b02901bd80d9ba9817c"},
+		TargetUserIDs:    []string{"1fe7f425a0e049d29d87ca3d32e45b5a"},
+		TargetNamespace:  "publisher",
+		Privacy:          true,
+		AdditionalFields: mockAdditionalFields,
+		Version:          defaultVersion,
+		Key:              testKey,
+		Payload:          mockPayload,
+	}
+
+	err := client.PublishSync(
+		NewPublish().
+			Topic(topicName).
+			EventName(mockEvent.EventName).
+			Namespace(mockEvent.Namespace).
+			ClientID(mockEvent.ClientID).
+			UserID(mockEvent.UserID).
+			SessionID(mockEvent.SessionID).
+			TraceID(mockEvent.TraceID).
+			SpanContext(mockEvent.SpanContext).
+			Context(context.Background()).
+			EventID(mockEvent.EventID).
+			EventType(mockEvent.EventType).
+			EventLevel(mockEvent.EventLevel).
+			ServiceName(mockEvent.ServiceName).
+			ClientIDs(mockEvent.ClientIDs).
+			TargetUserIDs(mockEvent.TargetUserIDs).
+			TargetNamespace(mockEvent.TargetNamespace).
+			Privacy(mockEvent.Privacy).
+			AdditionalFields(mockEvent.AdditionalFields).
+			Key(mockEvent.Key).
+			Timeout(time.Second).
+			Payload(mockPayload))
+	time.Sleep(time.Millisecond * 5)
+
+	assert.NoError(t, err)
+
+}
+
 // nolint dupl
 func TestKafkaNonConsumerGroupSuccess(t *testing.T) {
 	t.Parallel()

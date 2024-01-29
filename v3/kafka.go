@@ -359,6 +359,7 @@ func (client *KafkaClient) publishEvent(ctx context.Context, topic, eventName st
 
 	config.Topic = topic
 	writer = client.getWriter(config)
+	writer.AllowAutoTopicCreation = true
 	err = writer.WriteMessages(ctx, message)
 	if err != nil {
 		if errors.Is(err, io.ErrClosedPipe) {
