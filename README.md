@@ -330,5 +330,59 @@ err := client.PublishAuditLog(eventstream.
             // ...
 ```
 
-### License
+# Tips
+## v3
+### Faster Write
+
+Here are some of the things you can do if you want to have faster writes.
+
+#### Set `RequiredAcks`
+
+From the `WriterConfig` documentation:
+
+> Number of acknowledges from partition replicas required before receiving a response to a produce request. The default is -1, which means to wait for all replicas, and a value above 0 is required to indicate how many replicas should acknowledge a message to be considered successful.
+
+Set `RequiredAcks` to `1` so that it does not need to wait for all replicas to acknowledge.
+
+You can set it up by injecting the `WriterConfig` inside `BrokerConfig` when creating new `KafkaClient`.
+
+Note that there's a gotcha in the library, you cannot set it to `0`, since it will be converted to `-1`, which is `RequireAll`.
+
+```go
+    if config.RequiredAcks == 0 {
+		w.RequiredAcks = RequireAll
+	}
+```
+
+#### Set `Async`
+
+From the `WriterConfig` documentation:
+
+> Setting this flag to true causes the WriteMessages method to never block.
+It also means that errors are ignored since the caller will not receive
+the returned value. Use this only if you don't care about guarantees of
+whether the messages were written to kafka.
+
+Set `Async` to `true` so that after the message is pushed into the writer's queue, the publishing function will return immediately.
+
+You can set it up by injecting the `WriterConfig` inside `BrokerConfig` when creating new `KafkaClient`.
+
+#### Use more partitions
+Segmentio/kafka-go creates one `partitionWriter` per partition. So theoretically with more partitions, the more writer it has to parallelize the writing process.
+
+#### User more broker
+Kafka will divide partitions between brokers, so with more brokers, each will handle less partition.
+
+### Handling Partition Change
+
+While by default segmentio/kafka-go can automatically rebalance Consumer Group assignments whenever there's a member change (e.g. new service pod is spawned), it has specific config to detect and handle partition change.
+
+From the `ReaderConfig` documentation:
+
+> WatchForPartitionChanges is used to inform kafka-go that a consumer group should be
+polling the brokers and rebalancing if any partition changes happen to the topic.
+
+Set `WatchPartitionChanges` in `ReaderConfig` to true to tell the library to handle partition changes automatically. It can be injected inside `BrokerConfig` when creating new `KafkaClient`.
+
+# License
     Copyright © 2020, AccelByte Inc. Released under the Apache License, Version 2.0
