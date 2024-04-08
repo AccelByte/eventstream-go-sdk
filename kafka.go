@@ -21,7 +21,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"strconv"
 	"strings"
 	"sync"
@@ -76,14 +75,11 @@ type KafkaClient struct {
 	// current subscribers
 	readers map[string]*kafka.Consumer
 
-	// current writers
-	writers map[string]*kafka.Producer
+	// writer
+	writer *kafka.Producer
 
 	// mutex to avoid runtime races to access subscribers map
 	ReadersLock sync.RWMutex
-
-	// mutex to avoid runtime races to access writers map
-	WritersLock sync.RWMutex
 
 	// current topic subscribed on the kafka client
 	topicSubscribedCount map[string]int
@@ -157,7 +153,6 @@ func newKafkaClient(brokers []string, prefix string, configList ...*BrokerConfig
 		prefix:               prefix,
 		strictValidation:     config.StrictValidation,
 		readers:              make(map[string]*kafka.Consumer),
-		writers:              make(map[string]*kafka.Producer),
 		configMap:            configMap,
 		topicSubscribedCount: make(map[string]int),
 	}
@@ -179,7 +174,7 @@ func newKafkaClient(brokers []string, prefix string, configList ...*BrokerConfig
 	if config.MetricsRegistry != nil {
 		err = config.MetricsRegistry.Register(&kafkaprometheus.WriterCollector{Client: client})
 		if err != nil {
-			logrus.Errorf("failed to register kafka writers metrics: %v", err)
+			logrus.Errorf("failed to register kafka writer metrics: %v", err)
 		}
 		err = config.MetricsRegistry.Register(&kafkaprometheus.ReaderCollector{Client: client})
 		if err != nil {
@@ -227,7 +222,7 @@ func (client *KafkaClient) Publish(publishBuilder *PublishBuilder) error {
 	config := client.configMap
 
 	if publishBuilder.timeout == 0 {
-		publishBuilder.timeout = defaultPublishTimeoutMs
+		publishBuilder.timeout = defaultPublishTimeoutMs * time.Millisecond
 	}
 
 	client.configMapLock.Lock()
@@ -239,9 +234,14 @@ func (client *KafkaClient) Publish(publishBuilder *PublishBuilder) error {
 
 	topic := constructTopic(client.prefix, publishBuilder.topic)
 	go func(topic string) {
-		err = backoff.RetryNotify(func() error {
-			return client.publishEvent(publishBuilder.ctx, topic, publishBuilder.eventName, config, message)
-		}, backoff.WithContext(newPublishBackoff(), publishBuilder.ctx),
+		publishCtx, cancelPublish := context.WithTimeout(context.Background(), publishBuilder.timeout)
+		defer cancelPublish()
+
+		err = backoff.RetryNotify(
+			func() error {
+				return client.publishEvent(publishBuilder.ctx, topic, publishBuilder.eventName, config, message)
+			},
+			backoff.WithContext(newPublishBackoff(), publishCtx),
 			func(err error, d time.Duration) {
 				logrus.
 					WithField("Topic Name", topic).
@@ -319,6 +319,7 @@ func (client *KafkaClient) PublishSync(publishBuilder *PublishBuilder) error {
 func (client *KafkaClient) validateMessageSize(msg *kafka.Message) error {
 	maxSize := 1048576 // default size from kafka in bytes
 	if client.configMap != nil {
+		client.configMapLock.Lock()
 		// https://github.com/confluentinc/librdkafka/blob/master/CONFIGURATION.md
 		if valInterface, ok := (*client.configMap)["message.max.bytes"]; ok {
 			if intValue, ok := valInterface.(int); ok {
@@ -329,6 +330,7 @@ func (client *KafkaClient) validateMessageSize(msg *kafka.Message) error {
 				maxSize = int(intValue)
 			}
 		}
+		client.configMapLock.Unlock()
 	}
 	maxSize -= messageAdditionalSizeApprox
 	if len(msg.Key)+len(msg.Value) > maxSize {
@@ -360,7 +362,8 @@ func (client *KafkaClient) publishEvent(ctx context.Context, topic, eventName st
 				return
 			}
 
-			client.deleteWriter(topic)
+			client.writer.Close()
+			client.writer = nil
 
 			err = fmt.Errorf("recover: %v", r)
 		}
@@ -375,18 +378,21 @@ func (client *KafkaClient) publishEvent(ctx context.Context, topic, eventName st
 
 	err = writer.Produce(message, nil)
 	if err != nil {
-		if errors.Is(err, io.ErrClosedPipe) {
-			// new a writer and retry
-			writer = client.newWriter(config, topic)
-			err = writer.Produce(message, nil)
-		}
+		//if errors.Is(err, io.ErrClosedPipe) {
+		//	// new a writer and retry
+		//	writer.Close()
+		//	writer = nil
+		//	writer = client.newWriter(config, topic)
+		//	err = writer.Produce(message, nil)
+		//}
+		//
+		//if err != nil {
+		//	// delete writer if it fails to publish the event
+		//	client.writer.Close()
+		//	client.writer = nil
 
-		if err != nil {
-			// delete writer if it fails to publish the event
-			client.deleteWriter(topic)
-
-			return err
-		}
+		return err
+		//}
 	}
 
 	for e := range writer.Events() {
@@ -648,6 +654,7 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 
 				if !client.autoCommitIntervalEnabled && client.commitBeforeMessage {
 					if err = client.commitMessage(consumerMessage, reader, subscribeBuilder); err != nil {
+						loggerFields.Warn("error committing message: ", err.Error())
 						continue
 					}
 				}
@@ -664,6 +671,7 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 
 				if !client.autoCommitIntervalEnabled && !client.commitBeforeMessage {
 					if err = client.commitMessage(consumerMessage, reader, subscribeBuilder); err != nil {
+						loggerFields.Warn("error committing message: ", err.Error())
 						continue
 					}
 				}
@@ -677,6 +685,9 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 func (client *KafkaClient) readMessages(reader *kafka.Consumer) (*kafka.Message, error) {
 	for {
 		ev := reader.Poll(int(time.Second.Milliseconds()))
+		if ev == nil {
+			continue
+		}
 		switch e := ev.(type) {
 		case *kafka.Message:
 			if e.TopicPartition.Error != nil {
@@ -826,11 +837,8 @@ func (client *KafkaClient) setSubscriberReader(subscribeBuilder *SubscribeBuilde
 
 // getWriter get a writer based on config
 func (client *KafkaClient) getWriter(config *kafka.ConfigMap, topic string) (*kafka.Producer, error) {
-	client.WritersLock.Lock()
-	defer client.WritersLock.Unlock()
-
-	if writer, ok := client.writers[topic]; ok {
-		return writer, nil
+	if client.writer != nil {
+		return client.writer, nil
 	}
 
 	writer, err := kafka.NewProducer(config)
@@ -838,7 +846,7 @@ func (client *KafkaClient) getWriter(config *kafka.ConfigMap, topic string) (*ka
 		return nil, err
 	}
 
-	client.writers[topic] = writer
+	client.writer = writer
 
 	return writer, nil
 }
@@ -847,26 +855,9 @@ func (client *KafkaClient) getWriter(config *kafka.ConfigMap, topic string) (*ka
 func (client *KafkaClient) newWriter(config *kafka.ConfigMap, topic string) *kafka.Producer {
 
 	writer, _ := kafka.NewProducer(config)
-
-	client.WritersLock.Lock()
-	defer client.WritersLock.Unlock()
-	client.writers[topic] = writer
+	client.writer = writer
 
 	return writer
-}
-
-// deleteWriter delete writer
-func (client *KafkaClient) deleteWriter(topic string) {
-	client.WritersLock.Lock()
-	defer client.WritersLock.Unlock()
-
-	writer, ok := client.writers[topic]
-	if ok {
-		writer.Close()
-	}
-
-	// we only delete the writer from the slice but no close, should close in some interval?
-	delete(client.writers, topic)
 }
 
 // processMessage process a message from kafka
