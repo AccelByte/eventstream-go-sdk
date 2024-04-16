@@ -163,6 +163,9 @@ func newKafkaClient(brokers []string, prefix string, configList ...*BrokerConfig
 	}
 	client.commitBeforeMessage = config.CommitBeforeProcessing
 
+	client.configMap.SetKey("statistics.interval.ms", 10000)
+	client.configMap.SetKey("delivery.timeout.ms", defaultPublishTimeoutMs)
+
 	// must be the last config applied
 	for k, v := range config.BaseConfig {
 		err := client.configMap.SetKey(k, v)
@@ -221,16 +224,14 @@ func (client *KafkaClient) Publish(publishBuilder *PublishBuilder) error {
 
 	config := client.configMap
 
-	if publishBuilder.timeout == 0 {
-		publishBuilder.timeout = defaultPublishTimeoutMs * time.Millisecond
+	if publishBuilder.timeout != 0 {
+		client.configMapLock.Lock()
+		err = config.SetKey("delivery.timeout.ms", publishBuilder.timeout)
+		if err != nil {
+			return err
+		}
+		client.configMapLock.Unlock()
 	}
-
-	client.configMapLock.Lock()
-	err = config.SetKey("delivery.timeout.ms", publishBuilder.timeout)
-	if err != nil {
-		return err
-	}
-	client.configMapLock.Unlock()
 
 	topic := constructTopic(client.prefix, publishBuilder.topic)
 	go func(topic string) {
@@ -302,13 +303,13 @@ func (client *KafkaClient) PublishSync(publishBuilder *PublishBuilder) error {
 
 	config := client.configMap
 
-	if publishBuilder.timeout == 0 {
-		publishBuilder.timeout = defaultPublishTimeoutMs
-	}
-
-	err = config.SetKey("delivery.timeout.ms", publishBuilder.timeout)
-	if err != nil {
-		return err
+	if publishBuilder.timeout != 0 {
+		client.configMapLock.Lock()
+		err = config.SetKey("delivery.timeout.ms", publishBuilder.timeout)
+		if err != nil {
+			return err
+		}
+		client.configMapLock.Unlock()
 	}
 
 	topic := constructTopic(client.prefix, publishBuilder.topic)
@@ -369,46 +370,42 @@ func (client *KafkaClient) publishEvent(ctx context.Context, topic, eventName st
 		}
 	}()
 
-	writer, err = client.getWriter(config, topic)
+	writer, err = client.getWriter(config)
 	if err != nil {
 		return err
 	}
 
 	message.TopicPartition = kafka.TopicPartition{Topic: &topic, Partition: kafka.PartitionAny}
-
 	err = writer.Produce(message, nil)
-	if err != nil {
-		//if errors.Is(err, io.ErrClosedPipe) {
-		//	// new a writer and retry
-		//	writer.Close()
-		//	writer = nil
-		//	writer = client.newWriter(config, topic)
-		//	err = writer.Produce(message, nil)
-		//}
-		//
-		//if err != nil {
-		//	// delete writer if it fails to publish the event
-		//	client.writer.Close()
-		//	client.writer = nil
 
-		return err
-		//}
-	}
+	return err
+}
 
-	for e := range writer.Events() {
+func (client *KafkaClient) listenProducerEvents(producer *kafka.Producer) {
+	for e := range producer.Events() {
 		switch ev := e.(type) {
-		case *kafka.Stats:
-			go client.processStatsEvent(ev.String())
 		case *kafka.Message:
+			// The message delivery report, indicating success or
+			// permanent failure after retries have been exhausted.
+			// Application level retries won't help since the client
+			// is already configured to do that.
 			if ev.TopicPartition.Error != nil {
-				return ev.TopicPartition.Error
+				logrus.WithField("topic", *ev.TopicPartition.Topic).
+					Errorf("kafka message delivery failed: %s", ev.TopicPartition.Error.Error())
 			}
 		case kafka.Error:
-			return ev
+			// Generic client instance-level errors, such as
+			// broker connection failures, authentication issues, etc.
+			//
+			// These errors should generally be considered informational
+			// as the underlying client will automatically try to
+			// recover from any errors encountered, the application
+			// does not need to take action on them.
+			logrus.Error("kafka error: ", ev)
+		case *kafka.Stats:
+			go client.processStatsEvent(ev.String())
 		}
 	}
-
-	return nil
 }
 
 // PublishAuditLog send an audit log message
@@ -513,7 +510,7 @@ func (client *KafkaClient) unregister(subscribeBuilder *SubscribeBuilder) {
 	}
 }
 
-// Register register callback function and then subscribe topic
+// Register registers callback function and then subscribe topic
 // nolint: gocognit,funlen
 func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 	if subscribeBuilder == nil {
@@ -574,7 +571,6 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 			return err
 		}
 	}
-	config.SetKey("statistics.interval.ms", 5000)
 
 	reader, err := kafka.NewConsumer(config)
 	if err != nil {
@@ -836,7 +832,7 @@ func (client *KafkaClient) setSubscriberReader(subscribeBuilder *SubscribeBuilde
 }
 
 // getWriter get a writer based on config
-func (client *KafkaClient) getWriter(config *kafka.ConfigMap, topic string) (*kafka.Producer, error) {
+func (client *KafkaClient) getWriter(config *kafka.ConfigMap) (*kafka.Producer, error) {
 	if client.writer != nil {
 		return client.writer, nil
 	}
@@ -847,17 +843,9 @@ func (client *KafkaClient) getWriter(config *kafka.ConfigMap, topic string) (*ka
 	}
 
 	client.writer = writer
+	go client.listenProducerEvents(client.writer)
 
 	return writer, nil
-}
-
-// newWriter new a writer
-func (client *KafkaClient) newWriter(config *kafka.ConfigMap, topic string) *kafka.Producer {
-
-	writer, _ := kafka.NewProducer(config)
-	client.writer = writer
-
-	return writer
 }
 
 // processMessage process a message from kafka
