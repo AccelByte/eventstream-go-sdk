@@ -169,42 +169,50 @@ func TestKafkaPubSubSuccess(t *testing.T) {
 			}))
 	require.NoError(t, err)
 
-	for i := 0; i < 20; i++ {
-		err = client.Publish(
-			NewPublish().
-				Topic(topicName).
-				EventName(mockEvent.EventName).
-				Namespace(mockEvent.Namespace).
-				ClientID(mockEvent.ClientID).
-				UserID(mockEvent.UserID).
-				SessionID(mockEvent.SessionID).
-				TraceID(mockEvent.TraceID).
-				SpanContext(mockEvent.SpanContext).
-				Context(context.Background()).
-				EventID(mockEvent.EventID).
-				EventType(mockEvent.EventType).
-				EventLevel(mockEvent.EventLevel).
-				ServiceName(mockEvent.ServiceName).
-				ClientIDs(mockEvent.ClientIDs).
-				TargetUserIDs(mockEvent.TargetUserIDs).
-				TargetNamespace(mockEvent.TargetNamespace).
-				Privacy(mockEvent.Privacy).
-				AdditionalFields(mockEvent.AdditionalFields).
-				Key(mockEvent.Key).
-				Timeout(time.Second).
-				Payload(mockPayload))
-		time.Sleep(time.Millisecond * 5)
-		if err != nil {
-			assert.FailNow(t, errorPublish, err)
-			return
+	go func() {
+		for i := 0; i < 20; i++ {
+			err = client.Publish(
+				NewPublish().
+					Topic(topicName).
+					EventName(mockEvent.EventName).
+					Namespace(mockEvent.Namespace).
+					ClientID(mockEvent.ClientID).
+					UserID(mockEvent.UserID).
+					SessionID(mockEvent.SessionID).
+					TraceID(mockEvent.TraceID).
+					SpanContext(mockEvent.SpanContext).
+					Context(context.Background()).
+					EventID(mockEvent.EventID).
+					EventType(mockEvent.EventType).
+					EventLevel(mockEvent.EventLevel).
+					ServiceName(mockEvent.ServiceName).
+					ClientIDs(mockEvent.ClientIDs).
+					TargetUserIDs(mockEvent.TargetUserIDs).
+					TargetNamespace(mockEvent.TargetNamespace).
+					Privacy(mockEvent.Privacy).
+					AdditionalFields(mockEvent.AdditionalFields).
+					Key(mockEvent.Key).
+					Timeout(10 * time.Second).
+					Payload(mockPayload))
+			time.Sleep(time.Millisecond * 5)
+			if err != nil {
+				assert.FailNow(t, errorPublish, err)
+				return
+			}
 		}
-	}
+	}()
 
-	select {
-	case <-doneChan:
-		return
-	case <-ctx.Done():
-		assert.FailNow(t, errorTimeout)
+	doneCount := 0
+	for {
+		select {
+		case <-doneChan:
+			doneCount++
+			if doneCount == 20 {
+				return
+			}
+		case <-ctx.Done():
+			assert.FailNow(t, errorTimeout)
+		}
 	}
 }
 
@@ -458,6 +466,7 @@ func TestKafkaPubFailed(t *testing.T) {
 			Privacy(mockEvent.Privacy).
 			AdditionalFields(mockAdditionalFields).
 			Payload(mockPayload).
+			Timeout(time.Second).
 			ErrorCallback(errorCallback))
 	if err != nil {
 		assert.FailNow(t, errorPublish, err)
