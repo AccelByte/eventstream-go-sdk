@@ -226,7 +226,7 @@ func (client *KafkaClient) Publish(publishBuilder *PublishBuilder) error {
 
 	if publishBuilder.timeout != 0 {
 		client.configMapLock.Lock()
-		err = config.SetKey("delivery.timeout.ms", publishBuilder.timeout)
+		err = config.SetKey("delivery.timeout.ms", int(publishBuilder.timeout.Milliseconds()))
 		if err != nil {
 			return err
 		}
@@ -305,7 +305,7 @@ func (client *KafkaClient) PublishSync(publishBuilder *PublishBuilder) error {
 
 	if publishBuilder.timeout != 0 {
 		client.configMapLock.Lock()
-		err = config.SetKey("delivery.timeout.ms", publishBuilder.timeout)
+		err = config.SetKey("delivery.timeout.ms", int(publishBuilder.timeout.Milliseconds()))
 		if err != nil {
 			return err
 		}
@@ -637,15 +637,13 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 
 				return
 			default:
-				consumerMessage, err := client.readMessages(reader)
+				consumerMessage, err := client.readMessages(subscribeBuilder.ctx, reader)
 				if err != nil {
-					time.Sleep(200 * time.Millisecond)
+					if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+						// the subscription is shutting down. triggered by an external context cancellation
+						loggerFields.Warn("external context cancellation triggered. Cancelling the subscription")
+					}
 					continue
-				}
-				if subscribeBuilder.ctx.Err() != nil {
-					// the subscription is shutting down. triggered by an external context cancellation
-					loggerFields.Warn("triggered an external context cancellation. Cancelling the subscription")
-					continue // Shutting down because ctx expired
 				}
 
 				if !client.autoCommitIntervalEnabled && client.commitBeforeMessage {
@@ -678,8 +676,12 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 	return nil
 }
 
-func (client *KafkaClient) readMessages(reader *kafka.Consumer) (*kafka.Message, error) {
+func (client *KafkaClient) readMessages(subscribeCtx context.Context, reader *kafka.Consumer) (*kafka.Message, error) {
 	for {
+		if subscribeCtx.Err() != nil {
+			return nil, subscribeCtx.Err()
+		}
+
 		ev := reader.Poll(int(time.Second.Milliseconds()))
 		if ev == nil {
 			continue

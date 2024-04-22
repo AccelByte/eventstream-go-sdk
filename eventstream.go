@@ -306,6 +306,7 @@ func (p *PublishBuilder) Context(ctx context.Context) *PublishBuilder {
 
 // Timeout is an upper bound on the time to report success or failure after a call to send() returns.
 // The value of this config should be greater than or equal to the sum of request.timeout.ms and linger.ms.
+// Default value: 60000 ms
 func (p *PublishBuilder) Timeout(timeout time.Duration) *PublishBuilder {
 	p.timeout = timeout
 	return p

@@ -627,7 +627,7 @@ func TestKafkaPubSubDifferentGroupID(t *testing.T) {
 			AdditionalFields(mockEvent.AdditionalFields).
 			Version(2).
 			Context(context.Background()).
-			Timeout(time.Second).
+			Timeout(10 * time.Second).
 			Payload(mockPayload))
 	if err != nil {
 		assert.Fail(t, errorPublish, err)
@@ -803,7 +803,6 @@ func TestKafkaPubSubSameGroupID(t *testing.T) {
 			AdditionalFields(mockEvent.AdditionalFields).
 			Version(2).
 			Context(context.Background()).
-			//Timeout(time.Second).
 			Payload(mockPayload))
 	if err != nil {
 		assert.Fail(t, errorPublish, err)
@@ -939,7 +938,7 @@ func TestKafkaRegisterMultipleSubscriberCallbackSuccess(t *testing.T) {
 			Privacy(mockEvent.Privacy).
 			AdditionalFields(mockEvent.AdditionalFields).
 			Context(context.Background()).
-			Timeout(time.Second).
+			Timeout(10 * time.Second).
 			Payload(mockPayload))
 	require.NoError(t, err)
 
@@ -1041,7 +1040,7 @@ func TestKafkaUnregisterTopicSuccess(t *testing.T) {
 			SessionID(mockEvent.SessionID).
 			TraceID(mockEvent.TraceID).
 			Context(context.Background()).
-			Timeout(time.Second).
+			Timeout(10 * time.Second).
 			Payload(mockPayload))
 	if err != nil {
 		assert.FailNow(t, errorPublish, err)
