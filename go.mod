@@ -5,7 +5,7 @@ go 1.18
 require (
 	github.com/AccelByte/justice-input-validation-go v0.0.7
 	github.com/cenkalti/backoff v2.2.1+incompatible
-	github.com/confluentinc/confluent-kafka-go/v2 v2.2.0
+	github.com/confluentinc/confluent-kafka-go/v2 v2.3.0
 	github.com/google/uuid v1.3.0
 	github.com/mitchellh/mapstructure v1.1.2
 	github.com/pkg/errors v0.9.1
@@ -21,6 +21,7 @@ require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dlclark/regexp2 v1.2.0 // indirect
 	github.com/golang/protobuf v1.5.3 // indirect
+	github.com/kr/text v0.2.0 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.4 // indirect
 	github.com/pariz/gountries v0.0.0-20171019111738-adb00f6513a3 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
