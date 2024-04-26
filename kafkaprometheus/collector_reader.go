@@ -17,14 +17,23 @@
 package kafkaprometheus
 
 import (
-	"strings"
-
 	"github.com/prometheus/client_golang/prometheus"
+	"strings"
 )
 
 // ReaderCollector implements prometheus' Collector interface, for kafka reader.
 type ReaderCollector struct {
-	Client KafkaStatCollector
+	Client       KafkaStatCollector
+	counterStats readerCounterStats
+}
+
+type readerCounterStats struct {
+	readerDials      map[string]int64
+	readerTimeouts   map[string]int64
+	readerErrors     map[string]int64
+	readerRebalances map[string]int64
+	readerMessages   map[string]int64
+	readerBytes      map[string]int64
 }
 
 type ReaderStat struct {
@@ -44,16 +53,39 @@ var (
 )
 
 func (r *ReaderCollector) Collect(metrics chan<- prometheus.Metric) {
-	stats := r.Client.GetStats()
+	stats := r.Client.GetReaderStats()
+
+	if r.counterStats.readerDials == nil {
+		r.counterStats.readerDials = make(map[string]int64)
+		r.counterStats.readerTimeouts = make(map[string]int64)
+		r.counterStats.readerErrors = make(map[string]int64)
+		r.counterStats.readerRebalances = make(map[string]int64)
+		r.counterStats.readerMessages = make(map[string]int64)
+		r.counterStats.readerBytes = make(map[string]int64)
+	}
 
 	for broker, b := range stats.BrokerStats {
-		metrics <- counter(readerDials, b.Connects, broker)
-		metrics <- counter(readerTimeouts, b.Timeouts, broker)
-		metrics <- counter(readerErrors, b.RxErrors, broker)
+		if b.Connects > r.counterStats.readerDials[broker] {
+			metrics <- counter(readerDials, b.Connects-r.counterStats.readerDials[broker], broker)
+			r.counterStats.readerDials[broker] = b.Connects
+		}
+
+		if b.Timeouts > r.counterStats.readerTimeouts[broker] {
+			metrics <- counter(readerTimeouts, b.Timeouts-r.counterStats.readerTimeouts[broker], broker)
+			r.counterStats.readerTimeouts[broker] = b.Timeouts
+		}
+
+		if b.RxErrors > r.counterStats.readerErrors[broker] {
+			metrics <- counter(readerErrors, b.RxErrors-r.counterStats.readerErrors[broker], broker)
+			r.counterStats.readerErrors[broker] = b.RxErrors
+		}
 	}
 
 	for topic, t := range stats.TopicStats {
-		metrics <- counter(readerRebalances, t.RebalanceCount, topic)
+		if t.RebalanceCount > r.counterStats.readerRebalances[topic] {
+			metrics <- counter(readerRebalances, t.RebalanceCount-r.counterStats.readerRebalances[topic], topic)
+			r.counterStats.readerRebalances[topic] = t.RebalanceCount
+		}
 	}
 
 	for topicPartition, p := range stats.TopicPartitionStats {
@@ -63,8 +95,16 @@ func (r *ReaderCollector) Collect(metrics chan<- prometheus.Metric) {
 		}
 		topic := split[0]
 		partition := split[1]
-		metrics <- counter(readerMessages, p.RxMessages, topic, partition)
-		metrics <- counter(readerBytes, p.RxBytes, topic, partition)
+
+		if p.RxMessages > r.counterStats.readerMessages[topicPartition] {
+			metrics <- counter(readerMessages, p.RxMessages-r.counterStats.readerMessages[topicPartition], topic, partition)
+			r.counterStats.readerMessages[topicPartition] = p.RxMessages
+		}
+
+		if p.RxBytes > r.counterStats.readerBytes[topicPartition] {
+			metrics <- counter(readerBytes, p.RxBytes-r.counterStats.readerBytes[topicPartition], topic, partition)
+			r.counterStats.readerBytes[topicPartition] = p.RxBytes
+		}
 		metrics <- gauge(readerOffset, float64(p.CommittedOffset), topic, partition)
 		metrics <- gauge(readerLag, float64(p.Lag), topic, partition)
 		metrics <- gauge(readerQueueLength, float64(p.QueueLength), topic, partition)
