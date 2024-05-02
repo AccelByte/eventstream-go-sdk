@@ -43,6 +43,9 @@ const (
 	auditLogTopicDefault = "auditLog"
 
 	messageAdditionalSizeApprox = 2048 // in Byte. Approx data added to message that sent to kafka
+
+	producerStatsType = "producer"
+	consumerStatsType = "consumer"
 )
 
 var (
@@ -86,9 +89,13 @@ type KafkaClient struct {
 
 	adminClient *kafka.AdminClient
 
-	stats statistics.Stats
+	writerStats statistics.Stats
 
-	statsLock sync.RWMutex
+	writerStatsLock sync.RWMutex
+
+	readerStats statistics.Stats
+
+	readerStatsLock sync.RWMutex
 }
 
 func getConfig(configList []*BrokerConfig, brokers []string) (BrokerConfig, *kafka.ConfigMap, error) {
@@ -186,9 +193,12 @@ func newKafkaClient(brokers []string, prefix string, configList ...*BrokerConfig
 	}
 
 	// initialize empty stats
-	client.stats.BrokerStats = make(map[string]statistics.BrokerStats, 0)
-	client.stats.TopicStats = make(map[string]statistics.TopicStats, 0)
-	client.stats.TopicPartitionStats = make(map[string]statistics.TopicPartitionStats, 0)
+	client.writerStats.BrokerStats = make(map[string]statistics.BrokerStats, 0)
+	client.writerStats.TopicStats = make(map[string]statistics.TopicStats, 0)
+	client.writerStats.TopicPartitionStats = make(map[string]statistics.TopicPartitionStats, 0)
+	client.readerStats.BrokerStats = make(map[string]statistics.BrokerStats, 0)
+	client.readerStats.TopicStats = make(map[string]statistics.TopicStats, 0)
+	client.readerStats.TopicPartitionStats = make(map[string]statistics.TopicPartitionStats, 0)
 
 	return client, err
 }
@@ -578,11 +588,12 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 		if (strings.HasPrefix(event.String(), "AssignedPartitions") ||
 			strings.HasPrefix(event.String(), "RevokedPartitions")) &&
 			(strings.Contains(event.String(), topic)) {
-			client.statsLock.Lock()
-			defer client.statsLock.Unlock()
-			s := client.stats.TopicStats[topic]
+			client.readerStatsLock.Lock()
+			defer client.readerStatsLock.Unlock()
+
+			s := client.readerStats.TopicStats[topic]
 			s.RebalanceCount++
-			client.stats.TopicStats[topic] = s
+			client.readerStats.TopicStats[topic] = s
 		}
 		return nil
 	})
@@ -702,14 +713,20 @@ func (client *KafkaClient) processStatsEvent(statsEvent string) {
 	var kafkaStats statistics.KafkaStats
 	json.Unmarshal([]byte(statsEvent), &kafkaStats)
 
-	client.statsLock.Lock()
-	defer client.statsLock.Unlock()
+	switch kafkaStats.Type {
+	case consumerStatsType:
+		client.readerStatsLock.Lock()
+		defer client.readerStatsLock.Unlock()
+	case producerStatsType:
+		client.writerStatsLock.Lock()
+		defer client.writerStatsLock.Unlock()
+	}
 
 	for k, b := range kafkaStats.Brokers {
 		if k == "GroupCoordinator" {
 			continue
 		}
-		client.stats.BrokerStats[k] = statistics.BrokerStats{
+		brokerStats := statistics.BrokerStats{
 			Timeouts:  b.ReqTimeouts,
 			Connects:  b.Connects,
 			Writes:    b.Tx,
@@ -724,10 +741,16 @@ func (client *KafkaClient) processStatsEvent(statsEvent string) {
 			},
 			RxErrors: b.Rxerrs,
 		}
+		switch kafkaStats.Type {
+		case consumerStatsType:
+			client.readerStats.BrokerStats[k] = brokerStats
+		case producerStatsType:
+			client.writerStats.BrokerStats[k] = brokerStats
+		}
 	}
 
 	for k, t := range kafkaStats.Topics {
-		client.stats.TopicStats[k] = statistics.TopicStats{
+		topicStats := statistics.TopicStats{
 			BatchSize: statistics.Summary{
 				Avg:   t.Batchcnt.Avg,
 				Min:   t.Batchcnt.Min,
@@ -743,12 +766,21 @@ func (client *KafkaClient) processStatsEvent(statsEvent string) {
 				Sum:   t.Batchsize.Sum,
 			},
 		}
+		switch kafkaStats.Type {
+		case consumerStatsType:
+			// Keep the previous rebalance count since it should not be updated by this
+			// process (otherwise it will always get assigned to zero due to json unmarshal)
+			topicStats.RebalanceCount = client.readerStats.TopicStats[k].RebalanceCount
+			client.readerStats.TopicStats[k] = topicStats
+		case producerStatsType:
+			client.writerStats.TopicStats[k] = topicStats
+		}
 
 		for pKey, p := range t.Partitions {
 			if pKey == "-1" {
 				continue
 			}
-			client.stats.TopicPartitionStats[topicPartitionStatsKey(k, pKey)] = statistics.TopicPartitionStats{
+			topicPartitionStats := statistics.TopicPartitionStats{
 				TxMessages:      p.Txmsgs,
 				TxBytes:         p.Txbytes,
 				RxMessages:      p.Rxmsgs,
@@ -757,6 +789,12 @@ func (client *KafkaClient) processStatsEvent(statsEvent string) {
 				Lag:             p.ConsumerLag,
 				QueueLength:     p.FetchqCnt,
 				QueueCapacity:   p.FetchqSize,
+			}
+			switch kafkaStats.Type {
+			case consumerStatsType:
+				client.readerStats.TopicPartitionStats[topicPartitionStatsKey(k, pKey)] = topicPartitionStats
+			case producerStatsType:
+				client.writerStats.TopicPartitionStats[topicPartitionStatsKey(k, pKey)] = topicPartitionStats
 			}
 		}
 	}
@@ -957,12 +995,20 @@ func loadAuditEnv() {
 	}
 }
 
-// GetStats returns the internal statistics of brokers, topics, and partitions.
+// GetReaderStats returns the latest internal statistics of brokers, topics, and partitions of consumers.
 // The stats values are refreshed at a fixed interval which can be configured by setting the `statistics.interval.ms` config
-func (client *KafkaClient) GetStats() statistics.Stats {
-	client.statsLock.Lock()
-	defer client.statsLock.Unlock()
-	return client.stats.Copy()
+func (client *KafkaClient) GetReaderStats() statistics.Stats {
+	client.readerStatsLock.Lock()
+	defer client.readerStatsLock.Unlock()
+	return client.readerStats.Copy()
+}
+
+// GetWriterStats returns the latest internal statistics of brokers, topics, and partitions of producers.
+// The stats values are refreshed at a fixed interval which can be configured by setting the `statistics.interval.ms` config
+func (client *KafkaClient) GetWriterStats() statistics.Stats {
+	client.writerStatsLock.Lock()
+	defer client.writerStatsLock.Unlock()
+	return client.writerStats.Copy()
 }
 
 func newPublishBackoff() *backoff.ExponentialBackOff {

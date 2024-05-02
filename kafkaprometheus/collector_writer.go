@@ -17,14 +17,22 @@
 package kafkaprometheus
 
 import (
-	"strings"
-
 	"github.com/prometheus/client_golang/prometheus"
+	"strings"
 )
 
 // WriterCollector implements prometheus' Collector interface, for kafka writer.
 type WriterCollector struct {
-	Client KafkaStatCollector
+	Client       KafkaStatCollector
+	counterStats writerCounterStats
+}
+
+type writerCounterStats struct {
+	writerWrites   map[string]int64
+	writerErrors   map[string]int64
+	writerRetries  map[string]int64
+	writerMessages map[string]int64
+	writerBytes    map[string]int64
 }
 
 var (
@@ -42,12 +50,32 @@ var (
 )
 
 func (w *WriterCollector) Collect(metrics chan<- prometheus.Metric) {
-	stats := w.Client.GetStats()
+	stats := w.Client.GetWriterStats()
+
+	if w.counterStats.writerWrites == nil {
+		w.counterStats.writerWrites = make(map[string]int64)
+		w.counterStats.writerErrors = make(map[string]int64)
+		w.counterStats.writerRetries = make(map[string]int64)
+		w.counterStats.writerMessages = make(map[string]int64)
+		w.counterStats.writerBytes = make(map[string]int64)
+	}
 
 	for broker, b := range stats.BrokerStats {
-		metrics <- counter(writerWrites, b.Writes, broker)
-		metrics <- counter(writerErrors, b.TxErrors, broker)
-		metrics <- counter(writerRetries, b.TxRetries, broker)
+		if b.Writes > w.counterStats.writerWrites[broker] {
+			metrics <- counter(writerWrites, b.Writes-w.counterStats.writerWrites[broker], broker)
+			w.counterStats.writerWrites[broker] = b.Writes
+		}
+
+		if b.TxErrors > w.counterStats.writerErrors[broker] {
+			metrics <- counter(writerErrors, b.TxErrors-w.counterStats.writerErrors[broker], broker)
+			w.counterStats.writerErrors[broker] = b.TxErrors
+		}
+
+		if b.TxRetries > w.counterStats.writerRetries[broker] {
+			metrics <- counter(writerRetries, b.TxRetries-w.counterStats.writerRetries[broker], broker)
+			w.counterStats.writerRetries[broker] = b.TxRetries
+		}
+
 		metrics <- summaryDuration(writerWriteTime, DurationStats(b.WriteTime), broker)
 	}
 
@@ -63,8 +91,15 @@ func (w *WriterCollector) Collect(metrics chan<- prometheus.Metric) {
 		}
 		topic := split[0]
 		partition := split[1]
-		metrics <- counter(writerMessages, p.TxMessages, topic, partition)
-		metrics <- counter(writerBytes, p.TxBytes, topic, partition)
+		if p.TxMessages > w.counterStats.writerMessages[topicPartition] {
+			metrics <- counter(writerMessages, p.TxMessages-w.counterStats.writerMessages[topicPartition], topic, partition)
+			w.counterStats.writerMessages[topicPartition] = p.TxMessages
+		}
+
+		if p.TxBytes > w.counterStats.writerBytes[topicPartition] {
+			metrics <- counter(writerBytes, p.TxBytes-w.counterStats.writerBytes[topicPartition], topic, partition)
+			w.counterStats.writerBytes[topicPartition] = p.TxBytes
+		}
 	}
 }
 

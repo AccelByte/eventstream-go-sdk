@@ -37,7 +37,8 @@ const (
 const SlugSeparator = "$" // SlugSeparator is excluded by topicRegex.
 
 type KafkaStatCollector interface {
-	GetStats() statistics.Stats
+	GetReaderStats() statistics.Stats
+	GetWriterStats() statistics.Stats
 }
 
 func summaryCount(s *prometheus.SummaryVec, ss SummaryStats, labels ...string) prometheus.Metric {
