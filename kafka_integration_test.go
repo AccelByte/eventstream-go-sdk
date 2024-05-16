@@ -55,7 +55,7 @@ func createKafkaClient(t *testing.T) Client {
 		DialTimeout:      2 * time.Second,
 	}
 
-	brokerList := []string{"localhost:9092"}
+	brokerList := []string{"localhost:9094"}
 	client, _ := NewClient(prefix, eventStreamKafka, brokerList, config)
 
 	return client

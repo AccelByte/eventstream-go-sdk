@@ -59,7 +59,7 @@ func createKafkaClient(t *testing.T) Client {
 		BaseWriterConfig: &kafka.WriterConfig{BatchSize: 5},
 	}
 
-	brokerList := []string{"localhost:9092"}
+	brokerList := []string{"localhost:9094"}
 	client, _ := NewClient(prefix, eventStreamKafka, brokerList, config)
 
 	return client
