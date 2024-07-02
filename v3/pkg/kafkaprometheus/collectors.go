@@ -79,9 +79,7 @@ func counter(counter *prometheus.CounterVec, value int64, labels ...string) prom
 
 func gauge(gauge *prometheus.GaugeVec, value float64, labels ...string) prometheus.Metric {
 	m := gauge.WithLabelValues(labels...)
-	if value != 0 {
-		m.Set(value)
-	}
+	m.Set(value)
 	return m
 }
 
