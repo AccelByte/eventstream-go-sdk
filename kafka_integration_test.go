@@ -422,23 +422,8 @@ func TestKafkaPubFailed(t *testing.T) {
 
 	errorCallback := func(event *Event, err error) {
 		assert.NotNil(t, err, "error should not be nil")
-		assert.Equal(t, mockEvent.EventName, event.EventName, "event name should be equal")
-		assert.Equal(t, mockEvent.Namespace, event.Namespace, "namespace should be equal")
-		assert.Equal(t, mockEvent.ClientID, event.ClientID, "client ID should be equal")
-		assert.Equal(t, mockEvent.TraceID, event.TraceID, "trace ID should be equal")
-		assert.Equal(t, mockEvent.SpanContext, event.SpanContext, "span context should be equal")
-		assert.Equal(t, mockEvent.UserID, event.UserID, "user ID should be equal")
-		assert.Equal(t, mockEvent.SessionID, event.SessionID, "session ID should be equal")
-		assert.Equal(t, mockEvent.EventID, event.EventID, "EventID should be equal")
-		assert.Equal(t, mockEvent.EventType, event.EventType, "EventType should be equal")
-		assert.Equal(t, mockEvent.EventLevel, event.EventLevel, "EventLevel should be equal")
-		assert.Equal(t, mockEvent.ServiceName, event.ServiceName, "ServiceName should be equal")
-		assert.Equal(t, mockEvent.ClientIDs, event.ClientIDs, "ClientIDs should be equal")
-		assert.Equal(t, mockEvent.TargetUserIDs, event.TargetUserIDs, "TargetUserIDs should be equal")
-		assert.Equal(t, mockEvent.TargetNamespace, event.TargetNamespace, "TargetNamespace should be equal")
-		assert.Equal(t, mockEvent.Privacy, event.Privacy, "Privacy should be equal")
-		assert.Equal(t, mockEvent.AdditionalFields, event.AdditionalFields, "AdditionalFields should be equal")
-		assert.Equal(t, mockEvent.Version, event.Version, "version should be equal")
+		assert.Nil(t, event)
+
 		doneChan <- true
 	}
 
