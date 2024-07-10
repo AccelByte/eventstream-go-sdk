@@ -81,8 +81,7 @@ type KafkaClient struct {
 	// writer
 	writer *kafka.Producer
 
-	// map of writer error callbacks on each topic
-	writerErrorCallbacks map[string]func(_ *Event, err error)
+	writerLock sync.RWMutex
 
 	// mutex to avoid runtime races to access subscribers map
 	ReadersLock sync.RWMutex
@@ -195,9 +194,6 @@ func newKafkaClient(brokers []string, prefix string, configList ...*BrokerConfig
 		}
 	}
 
-	// initialize empty writer error callbacks
-	client.writerErrorCallbacks = make(map[string]func(event *Event, err error))
-
 	// initialize empty stats
 	client.writerStats.BrokerStats = make(map[string]statistics.BrokerStats, 0)
 	client.writerStats.TopicStats = make(map[string]statistics.TopicStats, 0)
@@ -243,19 +239,15 @@ func (client *KafkaClient) Publish(publishBuilder *PublishBuilder) error {
 	if publishBuilder.timeout > 0 {
 		client.configMapLock.Lock()
 		err = config.SetKey("delivery.timeout.ms", int(publishBuilder.timeout.Milliseconds()))
+		client.configMapLock.Unlock()
 		if err != nil {
 			return err
 		}
-		client.configMapLock.Unlock()
 	} else {
 		publishBuilder.timeout = defaultPublishTimeoutMs * time.Millisecond
 	}
 
 	topic := constructTopic(client.prefix, publishBuilder.topic)
-
-	if client.writerErrorCallbacks[topic] == nil && publishBuilder.errorCallback != nil {
-		client.writerErrorCallbacks[topic] = publishBuilder.errorCallback
-	}
 
 	err = client.publishEvent(topic, publishBuilder.eventName, config, message, false)
 	if err != nil {
@@ -263,10 +255,6 @@ func (client *KafkaClient) Publish(publishBuilder *PublishBuilder) error {
 			WithField("Topic Name", topic).
 			WithField("Event Name", publishBuilder.eventName).
 			Error("unable to publish event: ", err)
-
-		if publishBuilder.errorCallback != nil {
-			publishBuilder.errorCallback(nil, err)
-		}
 
 		return nil
 	}
@@ -313,10 +301,10 @@ func (client *KafkaClient) PublishSync(publishBuilder *PublishBuilder) error {
 	if publishBuilder.timeout > 0 {
 		client.configMapLock.Lock()
 		err = config.SetKey("delivery.timeout.ms", int(publishBuilder.timeout.Milliseconds()))
+		client.configMapLock.Unlock()
 		if err != nil {
 			return err
 		}
-		client.configMapLock.Unlock()
 	} else {
 		publishBuilder.timeout = defaultPublishTimeoutMs * time.Millisecond
 	}
@@ -371,6 +359,8 @@ func (client *KafkaClient) publishEvent(topic, eventName string, config *kafka.C
 				return
 			}
 
+			client.writerLock.Lock()
+			defer client.writerLock.Unlock()
 			client.writer.Close()
 			client.writer = nil
 
@@ -423,9 +413,6 @@ func (client *KafkaClient) listenProducerEvents(producer *kafka.Producer) {
 			if ev.TopicPartition.Error != nil {
 				logrus.WithField("topic", *ev.TopicPartition.Topic).
 					Errorf("kafka message delivery failed: %s", ev.TopicPartition.Error.Error())
-				if client.writerErrorCallbacks[*ev.TopicPartition.Topic] != nil {
-					go client.writerErrorCallbacks[*ev.TopicPartition.Topic](nil, ev.TopicPartition.Error)
-				}
 			}
 		case kafka.Error:
 			// Generic client instance-level errors, such as
@@ -897,6 +884,9 @@ func (client *KafkaClient) setSubscriberReader(subscribeBuilder *SubscribeBuilde
 
 // getWriter get a writer based on config
 func (client *KafkaClient) getWriter(config *kafka.ConfigMap) (*kafka.Producer, error) {
+	client.writerLock.Lock()
+	defer client.writerLock.Unlock()
+
 	if client.writer != nil {
 		return client.writer, nil
 	}

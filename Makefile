@@ -18,7 +18,7 @@ clean:
 test:
 	docker-compose -f docker-compose-test.yml up -d -V
 	sleep 30
-	go test -v ./...
+	go test -race -v ./...
 	docker-compose -f docker-compose-test.yml down
 
 coverage:

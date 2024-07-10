@@ -145,7 +145,6 @@ type PublishBuilder struct {
 	additionalFields map[string]interface{}
 	key              string
 	payload          map[string]interface{}
-	errorCallback    func(_ *Event, err error)
 	ctx              context.Context
 	timeout          time.Duration
 }
@@ -153,9 +152,8 @@ type PublishBuilder struct {
 // NewPublish create new PublishBuilder instance
 func NewPublish() *PublishBuilder {
 	return &PublishBuilder{
-		version:       defaultVersion,
-		ctx:           context.Background(),
-		errorCallback: nil,
+		version: defaultVersion,
+		ctx:     context.Background(),
 	}
 }
 
@@ -288,18 +286,6 @@ func (p *PublishBuilder) Key(key string) *PublishBuilder {
 // Payload is a event payload that will be published
 func (p *PublishBuilder) Payload(payload map[string]interface{}) *PublishBuilder {
 	p.payload = payload
-	return p
-}
-
-// ErrorCallback function to handle the event when failed to publish.
-//
-// Deprecated: As the underlying client handles error asynchronously, it's not possible to pass the Event to the
-// error callback internally unless every Event is tracked inside the eventstream library (but it will introduce unnecessary
-// complexity).
-//
-// This ErrorCallback will still be triggered when delivery error occurred, but the Event will always be nil.
-func (p *PublishBuilder) ErrorCallback(errorCallback func(_ *Event, err error)) *PublishBuilder {
-	p.errorCallback = errorCallback
 	return p
 }
 

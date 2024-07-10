@@ -387,8 +387,6 @@ func TestKafkaPubFailed(t *testing.T) {
 	ctx, done := context.WithTimeout(context.Background(), time.Duration(timeoutTest)*time.Second)
 	defer done()
 
-	doneChan := make(chan bool, 1)
-
 	client := createInvalidKafkaClient(t)
 
 	topicName := constructTopicTest()
@@ -420,17 +418,10 @@ func TestKafkaPubFailed(t *testing.T) {
 		Payload:          mockPayload,
 	}
 
-	errorCallback := func(event *Event, err error) {
-		assert.NotNil(t, err, "error should not be nil")
-		assert.Nil(t, event)
-
-		doneChan <- true
-	}
-
 	eventCtx, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
 
-	err := client.Publish(
+	err := client.PublishSync(
 		NewPublish().
 			Topic(topicName).
 			EventName(mockEvent.EventName).
@@ -451,19 +442,8 @@ func TestKafkaPubFailed(t *testing.T) {
 			Privacy(mockEvent.Privacy).
 			AdditionalFields(mockAdditionalFields).
 			Payload(mockPayload).
-			Timeout(time.Second).
-			ErrorCallback(errorCallback))
-	if err != nil {
-		assert.FailNow(t, errorPublish, err)
-		return
-	}
-
-	select {
-	case <-doneChan:
-		return
-	case <-ctx.Done():
-		assert.FailNow(t, errorTimeout)
-	}
+			Timeout(time.Second))
+	assert.Error(t, err)
 }
 
 // nolint dupl

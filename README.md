@@ -170,7 +170,6 @@ err := client.Publish(
 * Privacy : Privacy. Backward compatibility. (bool)
 * AdditionalFields : Additional fields. Backward compatibility. (map[string]interface{})
 * Payload : Additional attribute. (map[string]interface{})
-* ErrorCallback : Callback function when event failed to publish. (func(event *Event, err error){})
 
 ### Subscribe
 To subscribe an event from specific topic in stream, client should be register a callback function that executed once event received.
