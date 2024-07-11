@@ -69,8 +69,8 @@ type KafkaClient struct {
 
 	configMapLock sync.RWMutex
 
-	// flag to indicate that auto commit with interval is enabled instead of commit per message
-	autoCommitIntervalEnabled bool
+	// flag to indicate that auto commit is enabled instead of commit per message
+	autoCommitEnabled bool
 
 	// flag to indicate commit per message before the message processed
 	commitBeforeMessage bool
@@ -111,6 +111,14 @@ func getConfig(configList []*BrokerConfig, brokers []string) (BrokerConfig, *kaf
 	var config BrokerConfig
 	if hasConfig {
 		config = *configList[0]
+
+		if config.AutoCommitInterval == 0 {
+			config.AutoCommitInterval = time.Second
+		}
+
+		if config.PublishTimeout == 0 {
+			config.PublishTimeout = defaultPublishTimeoutMs * time.Millisecond
+		}
 
 		if config.DialTimeout != 0 {
 			if err := configMap.SetKey("socket.timeout.ms", fmt.Sprintf("%d", config.DialTimeout.Milliseconds())); err != nil {
@@ -165,15 +173,18 @@ func newKafkaClient(brokers []string, prefix string, configList ...*BrokerConfig
 		configMap:            configMap,
 		topicSubscribedCount: make(map[string]int),
 	}
-	if config.AutoCommitInterval != 0 {
-		client.autoCommitIntervalEnabled = true
+
+	client.autoCommitEnabled = !config.DisableAutoCommit
+	if client.autoCommitEnabled {
 		client.configMap.SetKey("enable.auto.commit", true)
+		client.configMap.SetKey("enable.auto.offset.store", false) // because we want to store offset manually
 		client.configMap.SetKey("auto.commit.interval.ms", int(config.AutoCommitInterval.Milliseconds()))
 	}
+
 	client.commitBeforeMessage = config.CommitBeforeProcessing
 
 	client.configMap.SetKey("statistics.interval.ms", 10000)
-	client.configMap.SetKey("delivery.timeout.ms", defaultPublishTimeoutMs)
+	client.configMap.SetKey("delivery.timeout.ms", int(config.PublishTimeout.Milliseconds()))
 
 	// must be the last config applied
 	for k, v := range config.BaseConfig {
@@ -668,9 +679,9 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 					continue
 				}
 
-				if !client.autoCommitIntervalEnabled && client.commitBeforeMessage {
-					if err = client.commitMessage(consumerMessage, reader, subscribeBuilder); err != nil {
-						loggerFields.Warn("error committing message: ", err.Error())
+				if client.commitBeforeMessage {
+					if err = client.processForCommit(consumerMessage, reader, subscribeBuilder); err != nil {
+						loggerFields.Warn("error to process commit the message: ", err.Error())
 						continue
 					}
 				}
@@ -685,9 +696,9 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 					return
 				}
 
-				if !client.autoCommitIntervalEnabled && !client.commitBeforeMessage {
-					if err = client.commitMessage(consumerMessage, reader, subscribeBuilder); err != nil {
-						loggerFields.Warn("error committing message: ", err.Error())
+				if !client.commitBeforeMessage {
+					if err = client.processForCommit(consumerMessage, reader, subscribeBuilder); err != nil {
+						loggerFields.Warn("error to process commit the message: ", err.Error())
 						continue
 					}
 				}
@@ -814,12 +825,18 @@ func (client *KafkaClient) processStatsEvent(statsEvent string) {
 	}
 }
 
-func (client *KafkaClient) commitMessage(message *kafka.Message, reader *kafka.Consumer, subscribeBuilder *SubscribeBuilder) error {
+// When auto commit is enabled, the message offset is stored in memory to be committed by auto-committer later. Otherwise, commit the message.
+func (client *KafkaClient) processForCommit(message *kafka.Message, reader *kafka.Consumer, subscribeBuilder *SubscribeBuilder) error {
 	if subscribeBuilder.asyncCommitMessage {
 		// Asynchronously commit the offset
 		go asyncCommitMessage(reader, message)
 	} else {
-		_, err := reader.CommitMessage(message)
+		var err error
+		if client.autoCommitEnabled {
+			_, err = reader.StoreMessage(message)
+		} else {
+			_, err = reader.CommitMessage(message)
+		}
 		if err != nil {
 			if subscribeBuilder.ctx.Err() == nil {
 				// the subscription is shutting down. triggered by an external context cancellation
