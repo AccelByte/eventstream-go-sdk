@@ -81,6 +81,8 @@ type KafkaClient struct {
 	// writer
 	writer *kafka.Producer
 
+	writerLock sync.RWMutex
+
 	// mutex to avoid runtime races to access subscribers map
 	ReadersLock sync.RWMutex
 
@@ -219,7 +221,7 @@ func (client *KafkaClient) Publish(publishBuilder *PublishBuilder) error {
 		return err
 	}
 
-	message, event, err := ConstructEvent(publishBuilder)
+	message, _, err := ConstructEvent(publishBuilder)
 	if err != nil {
 		logrus.
 			WithField("Topic Name", publishBuilder.topic).
@@ -237,35 +239,30 @@ func (client *KafkaClient) Publish(publishBuilder *PublishBuilder) error {
 	if publishBuilder.timeout > 0 {
 		client.configMapLock.Lock()
 		err = config.SetKey("delivery.timeout.ms", int(publishBuilder.timeout.Milliseconds()))
+		client.configMapLock.Unlock()
 		if err != nil {
 			return err
 		}
-		client.configMapLock.Unlock()
 	} else {
 		publishBuilder.timeout = defaultPublishTimeoutMs * time.Millisecond
 	}
 
 	topic := constructTopic(client.prefix, publishBuilder.topic)
-	go func(topic string) {
-		err = client.publishEvent(topic, publishBuilder.eventName, config, message)
-		if err != nil {
-			logrus.
-				WithField("Topic Name", topic).
-				WithField("Event Name", publishBuilder.eventName).
-				Error("giving up publishing event: ", err)
 
-			if publishBuilder.errorCallback != nil {
-				publishBuilder.errorCallback(event, err)
-			}
-
-			return
-		}
-
+	err = client.publishEvent(topic, publishBuilder.eventName, config, message, false)
+	if err != nil {
 		logrus.
 			WithField("Topic Name", topic).
 			WithField("Event Name", publishBuilder.eventName).
-			Debug("successfully publish event")
-	}(topic)
+			Error("unable to publish event: ", err)
+
+		return nil
+	}
+
+	logrus.
+		WithField("Topic Name", topic).
+		WithField("Event Name", publishBuilder.eventName).
+		Debug("successfully publish event")
 
 	return nil
 }
@@ -304,17 +301,17 @@ func (client *KafkaClient) PublishSync(publishBuilder *PublishBuilder) error {
 	if publishBuilder.timeout > 0 {
 		client.configMapLock.Lock()
 		err = config.SetKey("delivery.timeout.ms", int(publishBuilder.timeout.Milliseconds()))
+		client.configMapLock.Unlock()
 		if err != nil {
 			return err
 		}
-		client.configMapLock.Unlock()
 	} else {
 		publishBuilder.timeout = defaultPublishTimeoutMs * time.Millisecond
 	}
 
 	topic := constructTopic(client.prefix, publishBuilder.topic)
 
-	return client.publishEvent(topic, publishBuilder.eventName, config, message)
+	return client.publishEvent(topic, publishBuilder.eventName, config, message, true)
 }
 
 func (client *KafkaClient) validateMessageSize(msg *kafka.Message) error {
@@ -341,7 +338,7 @@ func (client *KafkaClient) validateMessageSize(msg *kafka.Message) error {
 }
 
 // Publish send event to a topic
-func (client *KafkaClient) publishEvent(topic, eventName string, config *kafka.ConfigMap, message *kafka.Message) (err error) {
+func (client *KafkaClient) publishEvent(topic, eventName string, config *kafka.ConfigMap, message *kafka.Message, sync bool) (err error) {
 	writer := &kafka.Producer{}
 
 	logFields := logrus.
@@ -362,6 +359,8 @@ func (client *KafkaClient) publishEvent(topic, eventName string, config *kafka.C
 				return
 			}
 
+			client.writerLock.Lock()
+			defer client.writerLock.Unlock()
 			client.writer.Close()
 			client.writer = nil
 
@@ -374,32 +373,47 @@ func (client *KafkaClient) publishEvent(topic, eventName string, config *kafka.C
 		return err
 	}
 
-	deliveryCh := make(chan kafka.Event)
 	message.TopicPartition = kafka.TopicPartition{Topic: &topic, Partition: kafka.PartitionAny}
-	err = writer.Produce(message, deliveryCh)
-	if err != nil {
-		return err
-	}
-
-	d := <-deliveryCh
-	if ev, ok := d.(*kafka.Message); ok {
-		// The message delivery report, indicating success or
-		// permanent failure after retries/timeout have been exhausted.
-		// Application level retries won't help since the client
-		// is already configured to do that.
-		if ev.TopicPartition.Error != nil {
-			logrus.WithField("topic", *ev.TopicPartition.Topic).
-				Errorf("kafka message delivery failed: %s", ev.TopicPartition.Error.Error())
-			return ev.TopicPartition.Error
+	if sync {
+		deliveryCh := make(chan kafka.Event)
+		err = writer.Produce(message, deliveryCh)
+		if err != nil {
+			return err
 		}
+
+		d := <-deliveryCh
+		if ev, ok := d.(*kafka.Message); ok {
+			// The message delivery report, indicating success or
+			// permanent failure after retries/timeout have been exhausted.
+			// Application level retries won't help since the client
+			// is already configured to do that.
+			if ev.TopicPartition.Error != nil {
+				logrus.WithField("topic", *ev.TopicPartition.Topic).
+					Errorf("kafka message delivery failed: %s", ev.TopicPartition.Error.Error())
+				return ev.TopicPartition.Error
+			}
+		}
+
+		return nil
 	}
 
-	return nil
+	err = writer.Produce(message, nil)
+
+	return err
 }
 
 func (client *KafkaClient) listenProducerEvents(producer *kafka.Producer) {
 	for e := range producer.Events() {
 		switch ev := e.(type) {
+		case *kafka.Message:
+			// The message delivery report, indicating success or
+			// permanent failure after retries/timeout have been exhausted.
+			// Application level retries won't help since the client
+			// is already configured to do that.
+			if ev.TopicPartition.Error != nil {
+				logrus.WithField("topic", *ev.TopicPartition.Topic).
+					Errorf("kafka message delivery failed: %s", ev.TopicPartition.Error.Error())
+			}
 		case kafka.Error:
 			// Generic client instance-level errors, such as
 			// broker connection failures, authentication issues, etc.
@@ -441,7 +455,7 @@ func (client *KafkaClient) publishAndRetryFailure(context context.Context, topic
 
 	go func() {
 		err := backoff.RetryNotify(func() error {
-			return client.publishEvent(topic, eventName, config, message)
+			return client.publishEvent(topic, eventName, config, message, true)
 		}, backoff.WithMaxRetries(newPublishBackoff(), maxBackOffCount),
 			func(err error, _ time.Duration) {
 				logrus.WithField("topic", topic).
@@ -870,6 +884,9 @@ func (client *KafkaClient) setSubscriberReader(subscribeBuilder *SubscribeBuilde
 
 // getWriter get a writer based on config
 func (client *KafkaClient) getWriter(config *kafka.ConfigMap) (*kafka.Producer, error) {
+	client.writerLock.Lock()
+	defer client.writerLock.Unlock()
+
 	if client.writer != nil {
 		return client.writer, nil
 	}
@@ -926,7 +943,7 @@ func (client *KafkaClient) publishDLQ(ctx context.Context, topic, eventName stri
 		Partition: kafka.PartitionAny,
 	}
 
-	err := client.publishEvent(dlqTopic, eventName, config, message)
+	err := client.publishEvent(dlqTopic, eventName, config, message, false)
 	if err != nil {
 		logrus.Warnf("unable to publish dlq message err : %v", err.Error())
 	}

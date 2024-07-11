@@ -145,7 +145,6 @@ type PublishBuilder struct {
 	additionalFields map[string]interface{}
 	key              string
 	payload          map[string]interface{}
-	errorCallback    func(event *Event, err error)
 	ctx              context.Context
 	timeout          time.Duration
 }
@@ -153,9 +152,8 @@ type PublishBuilder struct {
 // NewPublish create new PublishBuilder instance
 func NewPublish() *PublishBuilder {
 	return &PublishBuilder{
-		version:       defaultVersion,
-		ctx:           context.Background(),
-		errorCallback: nil,
+		version: defaultVersion,
+		ctx:     context.Background(),
 	}
 }
 
@@ -291,12 +289,6 @@ func (p *PublishBuilder) Payload(payload map[string]interface{}) *PublishBuilder
 	return p
 }
 
-// ErrorCallback function to handle the event when failed to publish
-func (p *PublishBuilder) ErrorCallback(errorCallback func(event *Event, err error)) *PublishBuilder {
-	p.errorCallback = errorCallback
-	return p
-}
-
 // Context define client context when publish event.
 // default: context.Background()
 func (p *PublishBuilder) Context(ctx context.Context) *PublishBuilder {
@@ -360,7 +352,7 @@ func (s *SubscribeBuilder) GroupInstanceID(groupInstanceID string) *SubscribeBui
 	return s
 }
 
-// EventName set event name that will be subscribe
+// EventName set event name that will be subscribed
 func (s *SubscribeBuilder) EventName(eventName string) *SubscribeBuilder {
 	s.eventName = eventName
 	return s

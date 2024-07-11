@@ -355,7 +355,6 @@ func makePayload(keyLength, messageLength int) map[string]interface{} {
 }
 
 func TestKafkaMaxMessageSize(t *testing.T) {
-	t.Parallel()
 	client := createKafkaClient(t)
 	topicName := constructTopicTest()
 
@@ -422,8 +421,6 @@ func TestKafkaMaxMessageSize(t *testing.T) {
 }
 
 func TestKafkaMaxMessageSizeModified(t *testing.T) {
-	t.Parallel()
-
 	config := &BrokerConfig{
 		CACertFile:       "",
 		StrictValidation: true,
