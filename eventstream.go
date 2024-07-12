@@ -92,18 +92,32 @@ var (
 
 // BrokerConfig is custom configuration for message broker
 type BrokerConfig struct {
-	StrictValidation bool
-	CACertFile       string
-	DialTimeout      time.Duration
-	SecurityConfig   *SecurityConfig
+	// -- CONSUMER CONFIGS --
 
-	// Enable auto commit on every consumer polls when the interval has stepped in.
-	// Enabling it will override CommitBeforeProcessing config. Default: 0 (disabled).
+	// Disable auto commit on every consumer polls when the AutoCommitInterval has stepped in.
+	// It's recommended to enable auto commit as manual commit per message is much slower.
+	// Default: false (auto commit is enabled)
+	DisableAutoCommit bool
+
+	// Interval between auto commits. This will only take effect when auto commit is enabled.
+	// Assigning zero value will be overridden by the default value.
+	// Default: 1 second
 	AutoCommitInterval time.Duration
 
 	// Enable committing the message offset right after consumer polls and before the message is processed.
-	// Otherwise, the message offset will be committed after it is processed.
+	// Otherwise, the message offset will be committed after it is processed. When auto commit is enabled,
+	// it will store the offset to be committed by auto-committer later.
+	// Default: false
 	CommitBeforeProcessing bool
+
+	// -- PUBLISHER CONFIGS --
+
+	// The maximum time duration the client may use to deliver a message, including retries
+	// Assigning zero value will be overridden by the default value.
+	// Default: 60 seconds
+	PublishTimeout time.Duration
+
+	// -- GENERAL CONFIGS --
 
 	// BaseConfig is a map to store key-value configuration of a broker.
 	// It will override other configs that have been set using other BrokerConfig options.
@@ -111,7 +125,11 @@ type BrokerConfig struct {
 	// 		List of supported Kafka configuration: https://github.com/confluentinc/librdkafka/blob/master/CONFIGURATION.md
 	BaseConfig map[string]interface{}
 
-	MetricsRegistry prometheus.Registerer // optional registry to report metrics to prometheus (used for kafka stats)
+	StrictValidation bool
+	CACertFile       string
+	DialTimeout      time.Duration
+	SecurityConfig   *SecurityConfig
+	MetricsRegistry  prometheus.Registerer // optional registry to report metrics to prometheus (used for kafka stats)
 }
 
 // SecurityConfig contains security configuration for message broker
@@ -298,6 +316,10 @@ func (p *PublishBuilder) Context(ctx context.Context) *PublishBuilder {
 
 // Timeout is an upper bound on the time to report success or failure after a call to send() returns.
 // The value of this config should be greater than or equal to the sum of request.timeout.ms and linger.ms.
+//
+// Deprecated: This config is deprecated. It will only take effect for the first publisher of the client.
+// Configure PublishTimeout from the BrokerConfig instead.
+//
 // Default value: 60000 ms
 func (p *PublishBuilder) Timeout(timeout time.Duration) *PublishBuilder {
 	p.timeout = timeout
