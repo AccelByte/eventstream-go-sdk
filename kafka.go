@@ -457,6 +457,20 @@ func (client *KafkaClient) PublishAuditLog(auditLogBuilder *AuditLogBuilder) err
 	return nil
 }
 
+func (client *KafkaClient) PublishMessage(topic, messageKey string, message interface{}, errorCallback PublishErrorCallbackFunc) error {
+	msgBytes, marshalErr := json.Marshal(&message)
+	if marshalErr != nil {
+		logrus.Errorf("unable to marshal message, error: %v", marshalErr)
+		return marshalErr
+	}
+
+	msg := &kafka.Message{
+		Key:   []byte(messageKey),
+		Value: msgBytes,
+	}
+	return client.publishAndRetryFailure(context.Background(), topic, "", msg, errorCallback)
+}
+
 // publishAndRetryFailure will publish message to kafka, if it fails, will retry at most 3 times.
 // If the message finally failed to publish, will call the error callback function to process this failure.
 func (client *KafkaClient) publishAndRetryFailure(context context.Context, topic, eventName string, message *kafka.Message, failureCallback PublishErrorCallbackFunc) error {

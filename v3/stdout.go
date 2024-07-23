@@ -113,3 +113,13 @@ func (client *StdoutClient) PublishAuditLog(auditLogBuilder *AuditLogBuilder) er
 	fmt.Println(string(message.Value))
 	return nil
 }
+
+func (client *StdoutClient) PublishMessage(topic, messageKey string, message interface{}, errorCallback PublishErrorCallbackFunc) error {
+	messageBuf, err := json.Marshal(&message)
+	if err != nil {
+		logrus.Errorf("unable to marshal message, error : %v", err)
+		return err
+	}
+	fmt.Println(string(messageBuf))
+	return nil
+}
