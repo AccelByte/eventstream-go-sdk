@@ -152,6 +152,7 @@ err := client.Publish(
 * Topic : Event topic. (string - alphaNumeric(256) - Required)
 * EventName : Event name. (string - alphaNumeric(256) - Required) 
 * Namespace : Event namespace. (string - alphaNumeric(256) - Required)
+* ID : Kafka message ID. (string - default. random UUID v4 without Hyphens - optional)
 * key : Kafka message key. (string - default. random UUID v4 without Hyphens - optional)
 * ClientID : Publisher client ID. (string - UUID v4 without Hyphens)7
 * UserID : Publisher user ID. (string - UUID v4 without Hyphens)
@@ -238,7 +239,7 @@ Callback function return 1 result(error):
 Event message is a set of event information that would be published or consumed by client.
 
 Event message format :
-* id : Event ID (string - UUID v4 without Hyphens)
+* id : Event ID (string - default. random UUID v4 without Hyphens)
 * name : Event name (string)
 * namespace : Event namespace (string)
 * traceId : Trace ID (string - UUID v4 without Hyphens)

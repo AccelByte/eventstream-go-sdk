@@ -428,7 +428,10 @@ func (client *KafkaClient) publishAndRetryFailure(context context.Context, topic
 
 // ConstructEvent construct event message
 func ConstructEvent(publishBuilder *PublishBuilder) (kafka.Message, *Event, error) {
-	id := generateID()
+	id := publishBuilder.id
+	if publishBuilder.id == "" {
+		id = generateID()
+	}
 	key := publishBuilder.key
 	if publishBuilder.key == "" {
 		key = id
