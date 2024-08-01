@@ -114,6 +114,7 @@ type SecurityConfig struct {
 
 // PublishBuilder defines the structure of message which is sent through message broker
 type PublishBuilder struct {
+	id               string
 	topic            []string
 	eventName        string
 	namespace        string
@@ -266,6 +267,12 @@ func (p *PublishBuilder) Privacy(privacy bool) *PublishBuilder {
 // AdditionalFields set AdditionalFields of publisher event
 func (p *PublishBuilder) AdditionalFields(additionalFields map[string]interface{}) *PublishBuilder {
 	p.additionalFields = additionalFields
+	return p
+}
+
+// ID set ID of publiser event
+func (p *PublishBuilder) ID(id string) *PublishBuilder {
+	p.id = id
 	return p
 }
 
