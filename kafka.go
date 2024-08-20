@@ -529,8 +529,9 @@ func ConstructEvent(publishBuilder *PublishBuilder) (*kafka.Message, *Event, err
 	}
 
 	return &kafka.Message{
-		Key:   []byte(key),
-		Value: eventBytes,
+		Key:     []byte(key),
+		Value:   eventBytes,
+		Headers: toKafkaHeaders(publishBuilder.headers),
 	}, event, nil
 }
 
@@ -667,6 +668,9 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 				}
 				if subscribeBuilder.callbackRaw != nil {
 					err = subscribeBuilder.callbackRaw(subscribeBuilder.ctx, nil, subscribeBuilder.ctx.Err())
+				}
+				if subscribeBuilder.callbackWithHeaders != nil {
+					err = subscribeBuilder.callbackWithHeaders(subscribeBuilder.ctx, nil, nil, subscribeBuilder.ctx.Err())
 				}
 
 				loggerFields.Warn("triggered an external context cancellation. Cancelling the subscription")
@@ -924,6 +928,9 @@ func (client *KafkaClient) getWriter(config *kafka.ConfigMap) (*kafka.Producer, 
 
 // processMessage process a message from kafka
 func (client *KafkaClient) processMessage(subscribeBuilder *SubscribeBuilder, message *kafka.Message, topic string) error {
+	if subscribeBuilder.callbackWithHeaders != nil {
+		return subscribeBuilder.callbackWithHeaders(subscribeBuilder.ctx, message.Value, toEventHeaders(message.Headers), nil)
+	}
 	if subscribeBuilder.callbackRaw != nil {
 		return subscribeBuilder.callbackRaw(subscribeBuilder.ctx, message.Value, nil)
 	}
@@ -983,6 +990,22 @@ func unmarshal(message *kafka.Message) (*Event, error) {
 	event.Key = string(message.Key)
 
 	return event, nil
+}
+
+func toEventHeaders(kafkaHeaders []kafka.Header) []Header {
+	var eventHeaders []Header
+	for _, header := range kafkaHeaders {
+		eventHeaders = append(eventHeaders, Header(header))
+	}
+	return eventHeaders
+}
+
+func toKafkaHeaders(eventHeaders []Header) []kafka.Header {
+	var kafkaHeaders []kafka.Header
+	for _, header := range eventHeaders {
+		kafkaHeaders = append(kafkaHeaders, kafka.Header(header))
+	}
+	return kafkaHeaders
 }
 
 // runCallback run callback function when receive an event
