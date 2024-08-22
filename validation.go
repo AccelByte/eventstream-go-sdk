@@ -147,7 +147,7 @@ func validateSubscribeEvent(subscribeBuilder *SubscribeBuilder) error {
 		GroupID             string
 		Callback            func(ctx context.Context, event *Event, err error) error
 		CallbackRaw         func(ctx context.Context, msg []byte, err error) error
-		CallbackWithHeaders func(ctx context.Context, msg []byte, headers []Header, err error) error
+		CallbackWithHeaders func(ctx context.Context, msg []byte, headers []Header, metadata *EventMetadata, err error) error
 	}{
 		Topic:               subscribeBuilder.topic,
 		EventName:           subscribeBuilder.eventName,

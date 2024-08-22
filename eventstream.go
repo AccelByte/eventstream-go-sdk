@@ -54,6 +54,13 @@ const (
 	ErrorLevel = "error"
 )
 
+// EventMetadata defines the structure of event metadata
+type EventMetadata struct {
+	Partition int    `json:",omitempty"`
+	Offset    int64  `json:",omitempty"`
+	Key       string `json:",omitempty"`
+}
+
 // Event defines the structure of event
 type Event struct {
 	ID               string                 `json:"id,omitempty"`
@@ -356,7 +363,7 @@ type SubscribeBuilder struct {
 	eventName           string
 	ctx                 context.Context
 	callbackRaw         func(ctx context.Context, msgValue []byte, err error) error
-	callbackWithHeaders func(ctx context.Context, msgValue []byte, headers []Header, err error) error
+	callbackWithHeaders func(ctx context.Context, msgValue []byte, headers []Header, metadata *EventMetadata, err error) error
 	// flag to send error message to DLQ
 	sendErrorDLQ bool
 	// flag to use async commit consumer
@@ -419,7 +426,7 @@ func (s *SubscribeBuilder) CallbackRaw(
 
 // CallbackWithHeaders callback that receives the undecoded payload and headers
 func (s *SubscribeBuilder) CallbackWithHeaders(
-	f func(ctx context.Context, msgValue []byte, headers []Header, err error) error,
+	f func(ctx context.Context, msgValue []byte, headers []Header, metadata *EventMetadata, err error) error,
 ) *SubscribeBuilder {
 	s.callbackWithHeaders = f
 	return s

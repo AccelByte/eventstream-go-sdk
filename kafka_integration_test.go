@@ -1116,7 +1116,7 @@ func TestKafkaPubSubWithHeaders(t *testing.T) {
 			GroupID(groupID).
 			Offset(0).
 			Context(ctx).
-			CallbackWithHeaders(func(ctx context.Context, _ []byte, headers []Header, err error) error {
+			CallbackWithHeaders(func(ctx context.Context, _ []byte, headers []Header, metadata *EventMetadata, err error) error {
 				if ctx.Err() != nil {
 					return ctx.Err()
 				}
@@ -1127,6 +1127,8 @@ func TestKafkaPubSubWithHeaders(t *testing.T) {
 
 				require.NotEmpty(t, headers)
 				require.Equal(t, expectedHeaders, headers)
+				require.NotNil(t, metadata)
+				require.Equal(t, "somekey", metadata.Key)
 
 				doneChan <- true
 
@@ -1156,7 +1158,8 @@ func TestKafkaPubSubWithHeaders(t *testing.T) {
 			Context(context.Background()).
 			Timeout(10 * time.Second).
 			Payload(mockPayload).
-			Headers(expectedHeaders))
+			Headers(expectedHeaders).
+			Key("somekey"))
 	require.NoError(t, err)
 
 	for {

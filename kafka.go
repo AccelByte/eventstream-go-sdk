@@ -670,7 +670,7 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 					err = subscribeBuilder.callbackRaw(subscribeBuilder.ctx, nil, subscribeBuilder.ctx.Err())
 				}
 				if subscribeBuilder.callbackWithHeaders != nil {
-					err = subscribeBuilder.callbackWithHeaders(subscribeBuilder.ctx, nil, nil, subscribeBuilder.ctx.Err())
+					err = subscribeBuilder.callbackWithHeaders(subscribeBuilder.ctx, nil, nil, nil, subscribeBuilder.ctx.Err())
 				}
 
 				loggerFields.Warn("triggered an external context cancellation. Cancelling the subscription")
@@ -929,7 +929,7 @@ func (client *KafkaClient) getWriter(config *kafka.ConfigMap) (*kafka.Producer, 
 // processMessage process a message from kafka
 func (client *KafkaClient) processMessage(subscribeBuilder *SubscribeBuilder, message *kafka.Message, topic string) error {
 	if subscribeBuilder.callbackWithHeaders != nil {
-		return subscribeBuilder.callbackWithHeaders(subscribeBuilder.ctx, message.Value, toEventHeaders(message.Headers), nil)
+		return subscribeBuilder.callbackWithHeaders(subscribeBuilder.ctx, message.Value, toEventHeaders(message.Headers), getEventMetadata(message), nil)
 	}
 	if subscribeBuilder.callbackRaw != nil {
 		return subscribeBuilder.callbackRaw(subscribeBuilder.ctx, message.Value, nil)
@@ -998,6 +998,17 @@ func toEventHeaders(kafkaHeaders []kafka.Header) []Header {
 		eventHeaders = append(eventHeaders, Header(header))
 	}
 	return eventHeaders
+}
+
+func getEventMetadata(message *kafka.Message) *EventMetadata {
+	if message == nil {
+		return nil
+	}
+	return &EventMetadata{
+		Partition: int(message.TopicPartition.Partition),
+		Offset:    int64(message.TopicPartition.Offset),
+		Key:       string(message.Key),
+	}
 }
 
 func toKafkaHeaders(eventHeaders []Header) []kafka.Header {
