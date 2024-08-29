@@ -447,7 +447,7 @@ func ConstructEvent(publishBuilder *PublishBuilder) (kafka.Message, *Event, erro
 		TraceID:          publishBuilder.traceID,
 		SpanContext:      publishBuilder.spanContext,
 		SessionID:        publishBuilder.sessionID,
-		Timestamp:        time.Now().UTC().Format(time.RFC3339),
+		Timestamp:        time.Now().UTC().Format(time.RFC3339Nano),
 		Version:          publishBuilder.version,
 		EventID:          publishBuilder.eventID,
 		EventType:        publishBuilder.eventType,
