@@ -56,7 +56,7 @@ func (client *StdoutClient) Publish(publishBuilder *PublishBuilder) error {
 		UserID:           publishBuilder.userID,
 		TraceID:          publishBuilder.traceID,
 		SpanContext:      publishBuilder.spanContext,
-		Timestamp:        time.Now().UTC().Format(time.RFC3339),
+		Timestamp:        time.Now().UTC().Format(time.RFC3339Nano),
 		EventID:          publishBuilder.eventID,
 		EventType:        publishBuilder.eventType,
 		EventLevel:       publishBuilder.eventLevel,
