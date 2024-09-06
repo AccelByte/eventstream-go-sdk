@@ -35,8 +35,8 @@ const (
 	eventStreamStdout = "stdout"
 	eventStreamKafka  = "kafka"
 
-	actorTypeUser   = "USER"
-	actorTypeClient = "CLIENT"
+	ActorTypeUser   = "USER"
+	ActorTypeClient = "CLIENT"
 )
 
 const (
@@ -398,6 +398,7 @@ type Client interface {
 	PublishSync(publishBuilder *PublishBuilder) error
 	Register(subscribeBuilder *SubscribeBuilder) error
 	PublishAuditLog(auditLogBuilder *AuditLogBuilder) error
+	PublishMessage(topic, messageKey string, message interface{}, errorCallback PublishErrorCallbackFunc) error
 }
 
 type AuditLog struct {
@@ -483,9 +484,9 @@ func (auditLogBuilder *AuditLogBuilder) Actor(actor string) *AuditLogBuilder {
 
 func (auditLogBuilder *AuditLogBuilder) IsActorTypeUser(isActorTypeUser bool) *AuditLogBuilder {
 	if isActorTypeUser {
-		auditLogBuilder.actorType = actorTypeUser
+		auditLogBuilder.actorType = ActorTypeUser
 	} else {
-		auditLogBuilder.actorType = actorTypeClient
+		auditLogBuilder.actorType = ActorTypeClient
 	}
 
 	return auditLogBuilder

@@ -43,3 +43,8 @@ func (client *BlackholeClient) PublishAuditLog(auditLogBuilder *AuditLogBuilder)
 	// do nothing
 	return nil
 }
+
+func (client *BlackholeClient) PublishMessage(topic, messageKey string, message interface{}, errorCallback PublishErrorCallbackFunc) error {
+	// do nothing
+	return nil
+}
