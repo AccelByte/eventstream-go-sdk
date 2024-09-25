@@ -487,18 +487,16 @@ type AuditLogBuilder struct {
 	content         map[string]interface{} `description:"optional"`
 	diff            *AuditLogDiff          `description:"optional, if diff is not nil, please make sure diff.Before and diff.Before are both not nil"`
 
-	key           string
-	errorCallback PublishErrorCallbackFunc
-	ctx           context.Context
-	version       int
+	key     string
+	ctx     context.Context
+	version int
 }
 
 // NewAuditLogBuilder create new AuditLogBuilder instance
 func NewAuditLogBuilder() *AuditLogBuilder {
 	return &AuditLogBuilder{
-		version:       defaultVersion,
-		ctx:           context.Background(),
-		errorCallback: nil,
+		version: defaultVersion,
+		ctx:     context.Background(),
 	}
 }
 
@@ -585,11 +583,6 @@ func (auditLogBuilder *AuditLogBuilder) Content(content map[string]interface{}) 
 // Diff If diff is not nil, please make sure diff.Before and diff.Before are both not nil
 func (auditLogBuilder *AuditLogBuilder) Diff(diff *AuditLogDiff) *AuditLogBuilder {
 	auditLogBuilder.diff = diff
-	return auditLogBuilder
-}
-
-func (auditLogBuilder *AuditLogBuilder) ErrorCallback(errCallback PublishErrorCallbackFunc) *AuditLogBuilder {
-	auditLogBuilder.errorCallback = errCallback
 	return auditLogBuilder
 }
 

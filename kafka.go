@@ -452,38 +452,20 @@ func (client *KafkaClient) PublishAuditLog(auditLogBuilder *AuditLogBuilder) err
 		if err != nil {
 			return err
 		}
-		return client.publishAndRetryFailure(context.Background(), topic, "", message, auditLogBuilder.errorCallback)
-	}
-	return nil
-}
 
-// publishAndRetryFailure will publish message to kafka, if it fails, will retry at most 3 times.
-// If the message finally failed to publish, will call the error callback function to process this failure.
-func (client *KafkaClient) publishAndRetryFailure(context context.Context, topic, eventName string, message *kafka.Message, failureCallback PublishErrorCallbackFunc) error {
-
-	config := client.configMap
-	topic = constructTopic(client.prefix, topic)
-
-	go func() {
-		err := backoff.RetryNotify(func() error {
-			return client.publishEvent(topic, eventName, config, message, true)
-		}, backoff.WithMaxRetries(newPublishBackoff(), maxBackOffCount),
-			func(err error, _ time.Duration) {
-				logrus.WithField("topic", topic).
-					Warn("retrying publish message: ", err)
-			})
+		config := client.configMap
+		topic = constructTopic(client.prefix, topic)
+		err = client.publishEvent(topic, "", config, message, false)
 		if err != nil {
-			logrus.WithField("topic", topic).
-				Error("retrying publish message failed: ", err)
-
-			if failureCallback != nil {
-				failureCallback(message.Value, err)
-			}
-			return
+			logrus.
+				WithField("Topic Name", topic).
+				Error("unable to publish event: ", err)
+			return nil
 		}
+
 		logrus.WithField("topic", topic).
-			Debug("successfully publish message")
-	}()
+			Debug("successfully publish audit log message")
+	}
 
 	return nil
 }
