@@ -35,11 +35,20 @@ import (
 )
 
 const (
-	defaultReaderSize     = 10e6 // 10MB
-	maxBackOffCount       = 4
-	kafkaMaxWait          = time.Second // (for consumer message batching)
-	saslScramAuth         = "SASL-SCRAM"
-	defaultPublishTimeout = 60 * time.Second
+	defaultReaderSize = 10e6 // 10MB
+	maxBackOffCount   = 4
+	saslScramAuth     = "SASL-SCRAM"
+
+	// default writer
+	defaultPublishTimeout     = 60 * time.Second
+	writerDefaultBatchTimeout = 200 * time.Millisecond
+
+	//default reader
+	readerDefaultReadBatchTimeout = 5 * time.Second
+	readerDefatulMaxWait          = 5 * time.Second
+	readerDefaultRebalanceTimeout = 5 * time.Second
+	readerDefaultSessionTimeout   = 6 * time.Second
+	readerDefaultCommitInterval   = 100 * time.Millisecond
 
 	auditLogTopicEnvKey  = "APP_EVENT_STREAM_AUDIT_LOG_TOPIC"
 	auditLogEnableEnvKey = "APP_EVENT_STREAM_AUDIT_LOG_ENABLED"
@@ -54,6 +63,8 @@ var (
 	errPubNilEvent     = errors.New("unable to publish nil event")
 	errSubNilEvent     = errors.New("unable to subscribe nil event")
 	errMessageTooLarge = errors.New("message to large")
+	ErrWriterIsNil     = errors.New("writer is nil")
+	ErrWriterIsAsync   = errors.New("writer is async")
 )
 
 // KafkaClient wraps client's functionality for Kafka
@@ -111,11 +122,23 @@ func setConfig(configList []*BrokerConfig, brokers []string) (BrokerConfig, erro
 	}
 
 	if config.BaseReaderConfig.MaxWait == 0 {
-		config.BaseReaderConfig.MaxWait = kafkaMaxWait
+		config.BaseReaderConfig.MaxWait = readerDefatulMaxWait
 	}
 
 	if config.BaseReaderConfig.CommitInterval == 0 {
-		config.BaseReaderConfig.CommitInterval = 100 * time.Millisecond // 0 means synchronous commits, we don't support it
+		config.BaseReaderConfig.CommitInterval = readerDefaultCommitInterval
+	}
+
+	if config.BaseReaderConfig.RebalanceTimeout == 0 {
+		config.BaseReaderConfig.RebalanceTimeout = readerDefaultRebalanceTimeout
+	}
+
+	if config.BaseReaderConfig.ReadBatchTimeout == 0 {
+		config.BaseReaderConfig.ReadBatchTimeout = readerDefaultReadBatchTimeout
+	}
+
+	if config.BaseReaderConfig.SessionTimeout == 0 {
+		config.BaseReaderConfig.SessionTimeout = readerDefaultSessionTimeout
 	}
 
 	if config.BaseWriterConfig.ReadTimeout == 0 && config.ReadTimeout != 0 {
@@ -124,6 +147,15 @@ func setConfig(configList []*BrokerConfig, brokers []string) (BrokerConfig, erro
 
 	if config.BaseWriterConfig.WriteTimeout == 0 && config.WriteTimeout != 0 {
 		config.BaseWriterConfig.WriteTimeout = config.WriteTimeout
+	}
+
+	if config.BaseWriterConfig.BatchTimeout == 0 {
+		config.BaseWriterConfig.BatchTimeout = writerDefaultBatchTimeout
+	}
+
+	if config.BaseWriterConfig.RequiredAcks >= 0 && config.BaseWriterConfig.RequiredAcks < 2 {
+		// when the RequredAcks is only 1 and the broker got restarted, the message is gone
+		logrus.Warn("RequiredAcks at least 2 to make sure that message recieved by broker clusters")
 	}
 
 	if hasConfig {
@@ -228,6 +260,12 @@ func (client *KafkaClient) Publish(publishBuilder *PublishBuilder) error {
 
 	config := client.publishConfig
 
+	if !config.Async {
+		logrus.WithField("Topic Name", publishBuilder.topic).
+			WithField("Event Name", publishBuilder.eventName).
+			Warn("sending async event but the publishConfig.Async is false")
+	}
+
 	if len(publishBuilder.topic) > 1 {
 		// TODO, change Topic() api to only allow 1 topic so we can simplify this logic. It will be a breaking change.
 		logrus.Warnf("eventstream got more than 1 topic per publish: %+v", publishBuilder.topic)
@@ -240,38 +278,53 @@ func (client *KafkaClient) Publish(publishBuilder *PublishBuilder) error {
 			publishBuilder.timeout = defaultPublishTimeout
 		}
 
-		go func(topic string) {
-			publishCtx, cancelPublish := context.WithTimeout(context.Background(), publishBuilder.timeout)
-			defer cancelPublish()
+		if !config.Async {
+			go func(topic string) {
+				publishCtx, cancelPublish := context.WithTimeout(context.Background(), publishBuilder.timeout)
+				defer cancelPublish()
 
-			err = backoff.RetryNotify(func() error {
-				return client.publishEvent(publishCtx, topic, publishBuilder.eventName, config, message)
-			}, backoff.WithContext(newPublishBackoff(), publishCtx),
-				func(err error, d time.Duration) {
+				err = backoff.RetryNotify(func() error {
+					return client.publishEvent(publishCtx, topic, publishBuilder.eventName, config, message)
+				}, backoff.WithContext(newPublishBackoff(), publishCtx),
+					func(err error, d time.Duration) {
+						logrus.
+							WithField("Topic Name", topic).
+							WithField("Event Name", publishBuilder.eventName).
+							WithField("backoff-duration", d).
+							Warn("retrying publish event: ", err)
+					})
+				if err != nil {
 					logrus.
 						WithField("Topic Name", topic).
 						WithField("Event Name", publishBuilder.eventName).
-						WithField("backoff-duration", d).
-						Warn("retrying publish event: ", err)
-				})
+						Error("giving up publishing event: ", err)
+
+					if publishBuilder.errorCallback != nil {
+						publishBuilder.errorCallback(event, err)
+					}
+
+					return
+				}
+
+				logrus.
+					WithField("Topic Name", topic).
+					WithField("Event Name", publishBuilder.eventName).
+					Debug("successfully publish event")
+			}(topic)
+		} else {
+			publishCtx, cancelPublish := context.WithTimeout(publishBuilder.ctx, publishBuilder.timeout)
+			err := client.publishEvent(publishCtx, topic, publishBuilder.eventName, config, message)
 			if err != nil {
 				logrus.
 					WithField("Topic Name", topic).
 					WithField("Event Name", publishBuilder.eventName).
-					Error("giving up publishing event: ", err)
-
-				if publishBuilder.errorCallback != nil {
-					publishBuilder.errorCallback(event, err)
-				}
-
-				return
+					WithError(err).
+					Error("unable to publish event")
+				cancelPublish()
+				return err
 			}
-
-			logrus.
-				WithField("Topic Name", topic).
-				WithField("Event Name", publishBuilder.eventName).
-				Debug("successfully publish event")
-		}(topic)
+			cancelPublish()
+		}
 	}
 
 	return nil
@@ -282,6 +335,10 @@ func (client *KafkaClient) PublishSync(publishBuilder *PublishBuilder) error {
 	if publishBuilder == nil {
 		logrus.Error(errPubNilEvent)
 		return errPubNilEvent
+	}
+
+	if client.publishConfig.Async {
+		return ErrWriterIsAsync
 	}
 
 	err := validatePublishEvent(publishBuilder, client.strictValidation)
@@ -331,7 +388,7 @@ func (client *KafkaClient) validateMessageSize(msg *kafka.Message) error {
 // Publish send event to a topic
 func (client *KafkaClient) publishEvent(ctx context.Context, topic, eventName string, config kafka.WriterConfig,
 	message kafka.Message) (err error) {
-	writer := &kafka.Writer{}
+	var writer *kafka.Writer
 
 	logFields := logrus.
 		WithField("Topic Name", topic).
@@ -359,6 +416,9 @@ func (client *KafkaClient) publishEvent(ctx context.Context, topic, eventName st
 
 	config.Topic = topic
 	writer = client.getWriter(config)
+	if writer == nil {
+		return errors.New("writer is nil")
+	}
 	err = writer.WriteMessages(ctx, message)
 	if err != nil {
 		if errors.Is(err, io.ErrClosedPipe) {
@@ -402,28 +462,31 @@ func (client *KafkaClient) publishAndRetryFailure(context context.Context, topic
 	config := client.publishConfig
 	topic = constructTopic(client.prefix, topic)
 
-	go func() {
-		err := backoff.RetryNotify(func() error {
-			return client.publishEvent(context, topic, eventName, config, message)
-		}, backoff.WithMaxRetries(newPublishBackoff(), maxBackOffCount),
-			func(err error, _ time.Duration) {
+	if !config.Async {
+		go func() {
+			err := backoff.RetryNotify(func() error {
+				return client.publishEvent(context, topic, eventName, config, message)
+			}, backoff.WithMaxRetries(newPublishBackoff(), maxBackOffCount),
+				func(err error, _ time.Duration) {
+					logrus.WithField("topic", topic).
+						Warn("retrying publish message: ", err)
+				})
+			if err != nil {
 				logrus.WithField("topic", topic).
-					Warn("retrying publish message: ", err)
-			})
-		if err != nil {
-			logrus.WithField("topic", topic).
-				Error("retrying publish message failed: ", err)
+					Error("retrying publish message failed: ", err)
 
-			if failureCallback != nil {
-				failureCallback(message.Value, err)
+				if failureCallback != nil {
+					failureCallback(message.Value, err)
+				}
+				return
 			}
-			return
-		}
-		logrus.WithField("topic", topic).
-			Debug("successfully publish message")
-	}()
-
-	return nil
+			logrus.WithField("topic", topic).
+				Debug("successfully publish message")
+		}()
+		return nil
+	} else {
+		return client.publishEvent(context, topic, eventName, config, message)
+	}
 }
 
 // ConstructEvent construct event message
