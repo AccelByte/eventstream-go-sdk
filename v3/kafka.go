@@ -425,15 +425,16 @@ func (client *KafkaClient) publishEvent(ctx context.Context, topic, eventName st
 	config.Topic = topic
 	writer = client.getWriter(config)
 	if writer == nil {
-		return errors.New("writer is nil")
+		return ErrWriterIsNil
 	}
 	err = writer.WriteMessages(ctx, message)
 	if err != nil {
 		if errors.Is(err, io.ErrClosedPipe) {
+			client.deleteWriter(config.Topic)
 			// new a writer and retry
-			writer, err = client.newWriter(config)
-			if err != nil {
-				return err
+			writer = client.getWriter(config)
+			if writer == nil {
+				return ErrWriterIsNil
 			}
 			err = writer.WriteMessages(ctx, message)
 		}
@@ -778,10 +779,6 @@ func (client *KafkaClient) newWriter(config kafka.WriterConfig) (*kafka.Writer, 
 		Transport:              transport,
 		AllowAutoTopicCreation: true,
 	}
-
-	client.WritersLock.Lock()
-	defer client.WritersLock.Unlock()
-	client.writers[config.Topic] = writer
 
 	return writer, nil
 }
