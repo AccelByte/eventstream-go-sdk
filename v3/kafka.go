@@ -153,9 +153,9 @@ func setConfig(configList []*BrokerConfig, brokers []string) (BrokerConfig, erro
 		config.BaseWriterConfig.BatchTimeout = writerDefaultBatchTimeout
 	}
 
-	if config.BaseWriterConfig.RequiredAcks >= 0 && config.BaseWriterConfig.RequiredAcks < 2 {
+	if config.BaseWriterConfig.RequiredAcks == 1 {
 		// when the RequredAcks is only 1 and the broker got restarted, the message is gone
-		logrus.Warn("RequiredAcks at least 2 to make sure that message recieved by broker clusters")
+		logrus.Warn("RequiredAcks only 1; there possibility that message gone when the broker is restarted")
 	}
 
 	if hasConfig {
@@ -196,6 +196,14 @@ func setConfig(configList []*BrokerConfig, brokers []string) (BrokerConfig, erro
 		config.BaseWriterConfig.Balancer = config.Balancer
 	}
 
+	if err := config.BaseReaderConfig.Validate(); err != nil {
+		return BrokerConfig{}, err
+	}
+
+	if err := config.BaseWriterConfig.Validate(); err != nil {
+		return BrokerConfig{}, err
+	}
+
 	return config, nil
 }
 
@@ -206,6 +214,10 @@ func newKafkaClient(brokers []string, prefix string, configList ...*BrokerConfig
 	loadAuditEnv()
 
 	config, err := setConfig(configList, brokers)
+
+	if err != nil {
+		return nil, err
+	}
 
 	client := &KafkaClient{
 		prefix:               prefix,
@@ -727,8 +739,7 @@ func (client *KafkaClient) getWriter(config kafka.WriterConfig) *kafka.Writer {
 		return writer
 	}
 
-	writer := kafka.NewWriter(config)
-	writer.AllowAutoTopicCreation = true
+	writer := client.newWriter(config)
 	client.writers[config.Topic] = writer
 
 	return writer
@@ -736,7 +747,30 @@ func (client *KafkaClient) getWriter(config kafka.WriterConfig) *kafka.Writer {
 
 // newWriter new a writer
 func (client *KafkaClient) newWriter(config kafka.WriterConfig) *kafka.Writer {
-	writer := kafka.NewWriter(config)
+	transport := &kafka.Transport{
+		SASL:        config.Dialer.SASLMechanism,
+		TLS:         config.Dialer.TLS,
+		ClientID:    config.Dialer.ClientID,
+		IdleTimeout: config.IdleConnTimeout,
+	}
+
+	writer := &kafka.Writer{
+		Addr:                   kafka.TCP(config.Brokers...),
+		Topic:                  config.Topic,
+		MaxAttempts:            config.MaxAttempts,
+		BatchSize:              config.BatchSize,
+		Balancer:               config.Balancer,
+		BatchBytes:             int64(config.BatchBytes),
+		BatchTimeout:           config.BatchTimeout,
+		ReadTimeout:            config.ReadTimeout,
+		WriteTimeout:           config.WriteTimeout,
+		RequiredAcks:           kafka.RequiredAcks(config.RequiredAcks),
+		Async:                  config.Async,
+		Logger:                 config.Logger,
+		ErrorLogger:            config.ErrorLogger,
+		Transport:              transport,
+		AllowAutoTopicCreation: true,
+	}
 
 	client.WritersLock.Lock()
 	defer client.WritersLock.Unlock()
