@@ -196,10 +196,6 @@ func setConfig(configList []*BrokerConfig, brokers []string) (BrokerConfig, erro
 		config.BaseWriterConfig.Balancer = config.Balancer
 	}
 
-	if err := config.BaseReaderConfig.Validate(); err != nil {
-		return BrokerConfig{}, err
-	}
-
 	if err := config.BaseWriterConfig.Validate(); err != nil {
 		return BrokerConfig{}, err
 	}
@@ -435,7 +431,10 @@ func (client *KafkaClient) publishEvent(ctx context.Context, topic, eventName st
 	if err != nil {
 		if errors.Is(err, io.ErrClosedPipe) {
 			// new a writer and retry
-			writer = client.newWriter(config)
+			writer, err = client.newWriter(config)
+			if err != nil {
+				return err
+			}
 			err = writer.WriteMessages(ctx, message)
 		}
 
@@ -739,14 +738,22 @@ func (client *KafkaClient) getWriter(config kafka.WriterConfig) *kafka.Writer {
 		return writer
 	}
 
-	writer := client.newWriter(config)
+	writer, err := client.newWriter(config)
+	if err != nil {
+		logrus.WithError(err).Error("unable to create writer")
+		return nil
+	}
 	client.writers[config.Topic] = writer
 
 	return writer
 }
 
 // newWriter new a writer
-func (client *KafkaClient) newWriter(config kafka.WriterConfig) *kafka.Writer {
+func (client *KafkaClient) newWriter(config kafka.WriterConfig) (*kafka.Writer, error) {
+	if err := config.Validate(); err != nil {
+		return nil, err
+	}
+
 	transport := &kafka.Transport{
 		SASL:        config.Dialer.SASLMechanism,
 		TLS:         config.Dialer.TLS,
@@ -776,7 +783,7 @@ func (client *KafkaClient) newWriter(config kafka.WriterConfig) *kafka.Writer {
 	defer client.WritersLock.Unlock()
 	client.writers[config.Topic] = writer
 
-	return writer
+	return writer, nil
 }
 
 // deleteWriter delete writer

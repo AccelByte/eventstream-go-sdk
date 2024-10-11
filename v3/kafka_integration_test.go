@@ -60,7 +60,8 @@ func createKafkaClient(t *testing.T) Client {
 	}
 
 	brokerList := []string{"localhost:9094"}
-	client, _ := NewClient(prefix, eventStreamKafka, brokerList, config)
+	client, err := NewClient(prefix, eventStreamKafka, brokerList, config)
+	assert.NoError(t, err)
 
 	return client
 }
