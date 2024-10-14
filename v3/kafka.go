@@ -614,8 +614,6 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 
 			if eventProcessingFailed {
 				if subscribeBuilder.ctx.Err() != nil {
-					// the subscription is shutting down. triggered by an external context cancellation
-					loggerFields.Warn("triggered an external context cancellation. Cancelling the subscription")
 					return
 				}
 
@@ -642,21 +640,21 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 					err = subscribeBuilder.callbackRaw(subscribeBuilder.ctx, nil, subscribeBuilder.ctx.Err())
 				}
 
-				loggerFields.Warn("triggered an external context cancellation. Cancelling the subscription")
+				loggerFields.WithError(subscribeBuilder.ctx.Err()).Warn("triggered an external context cancellation. Cancelling the subscription")
 
 				return
 			default:
 				consumerMessage, errRead := reader.FetchMessage(subscribeBuilder.ctx)
 				if errRead != nil {
-					if errRead == context.Canceled {
-						loggerFields.Infof("subscriber shut down because context cancelled")
+					if errors.Is(errRead, context.Canceled) || errors.Is(errRead, context.DeadlineExceeded) {
+						loggerFields.WithError(errRead).Infof("subscriber shut down because context cancelled")
 					} else {
-						loggerFields.Errorf("subscriber unable to fetch message: %v", errRead)
+						loggerFields.WithError(errRead).Error("subscriber unable to fetch message")
 					}
 
 					if subscribeBuilder.ctx.Err() != nil {
 						// the subscription is shutting down. triggered by an external context cancellation
-						loggerFields.Warn("triggered an external context cancellation. Cancelling the subscription")
+						loggerFields.WithError(subscribeBuilder.ctx.Err()).Warn("fetch message failed")
 						continue // Shutting down because ctx expired
 					}
 
@@ -670,7 +668,7 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 
 				err := client.processMessage(subscribeBuilder, consumerMessage, topic)
 				if err != nil {
-					loggerFields.Error("unable to process the event: ", err)
+					loggerFields.WithError(err).Error("unable to process the event")
 
 					// shutdown current subscriber and mark it for restarting
 					eventProcessingFailed = true
@@ -680,13 +678,13 @@ func (client *KafkaClient) Register(subscribeBuilder *SubscribeBuilder) error {
 
 				err = reader.CommitMessages(subscribeBuilder.ctx, consumerMessage)
 				if err != nil {
-					if subscribeBuilder.ctx.Err() == nil {
+					if subscribeBuilder.ctx.Err() != nil {
 						// the subscription is shutting down. triggered by an external context cancellation
-						loggerFields.Warn("triggered an external context cancellation. Cancelling the subscription")
+						loggerFields.WithError(subscribeBuilder.ctx.Err()).Warn("commit message failed. context canceled.")
 						continue
 					}
 
-					loggerFields.Error("unable to commit the event: ", err)
+					loggerFields.WithError(err).Error("unable to commit the event")
 				}
 			}
 		}
