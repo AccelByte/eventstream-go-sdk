@@ -153,9 +153,9 @@ func setConfig(configList []*BrokerConfig, brokers []string) (BrokerConfig, erro
 		config.BaseWriterConfig.BatchTimeout = writerDefaultBatchTimeout
 	}
 
-	if config.BaseWriterConfig.RequiredAcks == 1 {
-		// when the RequredAcks is only 1 and the broker got restarted, the message is gone
-		logrus.Warn("RequiredAcks only 1; there possibility that message gone when the broker is restarted")
+	if config.BaseWriterConfig.RequiredAcks != int(kafka.RequireAll) {
+		// when the RequredAcks is not RequireAll and the broker got restarted, the message is gone
+		logrus.Warn("RequiredAcks is not RequiredAll (-1); there possibility that message gone when the broker is restarted")
 	}
 
 	if hasConfig {
