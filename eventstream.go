@@ -56,29 +56,30 @@ const (
 
 // Event defines the structure of event
 type Event struct {
-	ID               string                 `json:"id,omitempty"`
-	EventName        string                 `json:"name,omitempty"`
-	Namespace        string                 `json:"namespace,omitempty"`
-	ParentNamespace  string                 `json:"parentNamespace,omitempty"`
-	UnionNamespace   string                 `json:"unionNamespace,omitempty"`
-	ClientID         string                 `json:"clientId,omitempty"`
-	TraceID          string                 `json:"traceId,omitempty"`
-	SpanContext      string                 `json:"spanContext,omitempty"`
-	UserID           string                 `json:"userId,omitempty"`
-	SessionID        string                 `json:"sessionId,omitempty"`
-	Timestamp        string                 `json:"timestamp,omitempty"`
-	Version          int                    `json:"version,omitempty"`
-	EventID          int                    `json:"event_id,omitempty"`
-	EventType        int                    `json:"event_type,omitempty"`
-	EventLevel       int                    `json:"event_level,omitempty"`
-	ServiceName      string                 `json:"service,omitempty"`
-	ClientIDs        []string               `json:"client_ids,omitempty"`
-	TargetUserIDs    []string               `json:"target_user_ids,omitempty"`
-	TargetNamespace  string                 `json:"target_namespace,omitempty"`
-	Privacy          bool                   `json:"privacy,omitempty"`
-	Topic            string                 `json:"topic,omitempty"`
-	AdditionalFields map[string]interface{} `json:"additional_fields,omitempty"`
-	Payload          map[string]interface{} `json:"payload,omitempty"`
+	ID                string                 `json:"id,omitempty"`
+	EventName         string                 `json:"name,omitempty"`
+	Namespace         string                 `json:"namespace,omitempty"`
+	ParentNamespace   string                 `json:"parentNamespace,omitempty"`
+	UnionNamespace    string                 `json:"unionNamespace,omitempty"`
+	ClientID          string                 `json:"clientId,omitempty"`
+	TraceID           string                 `json:"traceId,omitempty"`
+	SpanContext       string                 `json:"spanContext,omitempty"`
+	UserID            string                 `json:"userId,omitempty"`
+	SessionID         string                 `json:"sessionId,omitempty"`
+	Timestamp         string                 `json:"timestamp,omitempty"`
+	TimestampUnixNano int64                  `json:"timestampUnixNano,omitempty"`
+	Version           int                    `json:"version,omitempty"`
+	EventID           int                    `json:"event_id,omitempty"`
+	EventType         int                    `json:"event_type,omitempty"`
+	EventLevel        int                    `json:"event_level,omitempty"`
+	ServiceName       string                 `json:"service,omitempty"`
+	ClientIDs         []string               `json:"client_ids,omitempty"`
+	TargetUserIDs     []string               `json:"target_user_ids,omitempty"`
+	TargetNamespace   string                 `json:"target_namespace,omitempty"`
+	Privacy           bool                   `json:"privacy,omitempty"`
+	Topic             string                 `json:"topic,omitempty"`
+	AdditionalFields  map[string]interface{} `json:"additional_fields,omitempty"`
+	Payload           map[string]interface{} `json:"payload,omitempty"`
 
 	Partition int    `json:",omitempty"`
 	Offset    int64  `json:",omitempty"`

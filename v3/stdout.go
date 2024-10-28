@@ -48,26 +48,29 @@ func (client *StdoutClient) Publish(publishBuilder *PublishBuilder) error {
 		return errors.New("unable to publish nil event")
 	}
 
+	now := time.Now().UTC()
+
 	event := &Event{
-		ID:               generateID(),
-		EventName:        publishBuilder.eventName,
-		Namespace:        publishBuilder.namespace,
-		ClientID:         publishBuilder.clientID,
-		UserID:           publishBuilder.userID,
-		TraceID:          publishBuilder.traceID,
-		SpanContext:      publishBuilder.spanContext,
-		Timestamp:        time.Now().UTC().Format(time.RFC3339Nano),
-		EventID:          publishBuilder.eventID,
-		EventType:        publishBuilder.eventType,
-		EventLevel:       publishBuilder.eventLevel,
-		ServiceName:      publishBuilder.serviceName,
-		ClientIDs:        publishBuilder.clientIDs,
-		TargetUserIDs:    publishBuilder.targetUserIDs,
-		TargetNamespace:  publishBuilder.targetNamespace,
-		Privacy:          publishBuilder.privacy,
-		AdditionalFields: publishBuilder.additionalFields,
-		Version:          publishBuilder.version,
-		Payload:          publishBuilder.payload,
+		ID:                generateID(),
+		EventName:         publishBuilder.eventName,
+		Namespace:         publishBuilder.namespace,
+		ClientID:          publishBuilder.clientID,
+		UserID:            publishBuilder.userID,
+		TraceID:           publishBuilder.traceID,
+		SpanContext:       publishBuilder.spanContext,
+		Timestamp:         now.Format(time.RFC3339),
+		TimestampUnixNano: now.UnixNano(),
+		EventID:           publishBuilder.eventID,
+		EventType:         publishBuilder.eventType,
+		EventLevel:        publishBuilder.eventLevel,
+		ServiceName:       publishBuilder.serviceName,
+		ClientIDs:         publishBuilder.clientIDs,
+		TargetUserIDs:     publishBuilder.targetUserIDs,
+		TargetNamespace:   publishBuilder.targetNamespace,
+		Privacy:           publishBuilder.privacy,
+		AdditionalFields:  publishBuilder.additionalFields,
+		Version:           publishBuilder.version,
+		Payload:           publishBuilder.payload,
 	}
 
 	eventByte, err := marshal(event)
