@@ -54,6 +54,13 @@ const (
 	ErrorLevel = "error"
 )
 
+// EventMetadata defines the structure of event metadata
+type EventMetadata struct {
+	Partition int    `json:",omitempty"`
+	Offset    int64  `json:",omitempty"`
+	Key       string `json:",omitempty"`
+}
+
 // Event defines the structure of event
 type Event struct {
 	ID                string                 `json:"id,omitempty"`
@@ -140,6 +147,12 @@ type SecurityConfig struct {
 	SASLPassword       string
 }
 
+// Header represents a single entry in a list of record headers.
+type Header struct {
+	Key   string
+	Value []byte
+}
+
 // PublishBuilder defines the structure of message which is sent through message broker
 type PublishBuilder struct {
 	id               string
@@ -165,6 +178,7 @@ type PublishBuilder struct {
 	additionalFields map[string]interface{}
 	key              string
 	payload          map[string]interface{}
+	headers          []Header
 	ctx              context.Context
 	timeout          time.Duration
 }
@@ -315,6 +329,12 @@ func (p *PublishBuilder) Payload(payload map[string]interface{}) *PublishBuilder
 	return p
 }
 
+// Headers are event headers that will be published
+func (p *PublishBuilder) Headers(headers []Header) *PublishBuilder {
+	p.headers = headers
+	return p
+}
+
 // Context define client context when publish event.
 // default: context.Background()
 func (p *PublishBuilder) Context(ctx context.Context) *PublishBuilder {
@@ -336,14 +356,15 @@ func (p *PublishBuilder) Timeout(timeout time.Duration) *PublishBuilder {
 
 // SubscribeBuilder defines the structure of message which is sent through message broker
 type SubscribeBuilder struct {
-	topic           string
-	groupID         string
-	groupInstanceID string
-	offset          int64
-	callback        func(ctx context.Context, event *Event, err error) error
-	eventName       string
-	ctx             context.Context
-	callbackRaw     func(ctx context.Context, msgValue []byte, err error) error
+	topic               string
+	groupID             string
+	groupInstanceID     string
+	offset              int64
+	callback            func(ctx context.Context, event *Event, err error) error
+	eventName           string
+	ctx                 context.Context
+	callbackRaw         func(ctx context.Context, msgValue []byte, err error) error
+	callbackWithHeaders func(ctx context.Context, msgValue []byte, headers []Header, metadata *EventMetadata, err error) error
 	// flag to send error message to DLQ
 	sendErrorDLQ bool
 	// flag to use async commit consumer
@@ -401,6 +422,14 @@ func (s *SubscribeBuilder) CallbackRaw(
 	f func(ctx context.Context, msgValue []byte, err error) error,
 ) *SubscribeBuilder {
 	s.callbackRaw = f
+	return s
+}
+
+// CallbackWithHeaders callback that receives the undecoded payload and headers
+func (s *SubscribeBuilder) CallbackWithHeaders(
+	f func(ctx context.Context, msgValue []byte, headers []Header, metadata *EventMetadata, err error) error,
+) *SubscribeBuilder {
+	s.callbackWithHeaders = f
 	return s
 }
 
