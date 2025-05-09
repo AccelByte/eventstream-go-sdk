@@ -71,6 +71,7 @@ func (client *StdoutClient) Publish(publishBuilder *PublishBuilder) error {
 		AdditionalFields:  publishBuilder.additionalFields,
 		Version:           publishBuilder.version,
 		Payload:           publishBuilder.payload,
+		SourceNamespace:   publishBuilder.sourceNamespace,
 	}
 
 	eventByte, err := marshal(event)
