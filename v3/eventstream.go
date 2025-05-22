@@ -77,6 +77,7 @@ type Event struct {
 	TargetNamespace   string                 `json:"target_namespace,omitempty"`
 	Privacy           bool                   `json:"privacy,omitempty"`
 	Topic             string                 `json:"topic,omitempty"`
+	SourceNamespace  string                  `json:"sourceNamespace,omitempty"`
 	AdditionalFields  map[string]interface{} `json:"additional_fields,omitempty"`
 	Payload           map[string]interface{} `json:"payload,omitempty"`
 
@@ -141,6 +142,7 @@ type PublishBuilder struct {
 	errorCallback    func(event *Event, err error)
 	ctx              context.Context
 	timeout          time.Duration
+	sourceNamespace  string
 }
 
 // NewPublish create new PublishBuilder instance
@@ -256,6 +258,12 @@ func (p *PublishBuilder) TargetUserIDs(targetUserIDs []string) *PublishBuilder {
 // TargetNamespace set targetNamespace of publisher event
 func (p *PublishBuilder) TargetNamespace(targetNamespace string) *PublishBuilder {
 	p.targetNamespace = targetNamespace
+	return p
+}
+
+// SourceNamespace set sourceNamespace of publisher event
+func (p *PublishBuilder) SourceNamespace(sourceNamespace string) *PublishBuilder {
+	p.sourceNamespace = sourceNamespace
 	return p
 }
 
