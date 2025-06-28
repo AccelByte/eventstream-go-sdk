@@ -1060,3 +1060,114 @@ func callerFuncName() string {
 	}
 	return "UnknownFunction"
 }
+
+// nolint:funlen
+func TestKafkaPubSubWithHeaders(t *testing.T) {
+	t.Parallel()
+
+	ctx, done := context.WithTimeout(context.Background(), time.Duration(timeoutTest)*time.Second)
+	defer done()
+
+	doneChan := make(chan bool, 1)
+
+	client := createKafkaClient(t)
+
+	topicName := constructTopicTest()
+
+	var mockPayload = make(map[string]interface{})
+	mockPayload[testPayload] = "payloadContent"
+
+	mockAdditionalFields := map[string]interface{}{
+		"summary": "user:_failed",
+	}
+
+	mockEvent := &Event{
+		EventName:        "testEventWithHeaders",
+		Namespace:        "event",
+		ClientID:         "b2a64320e9b041168089d3a01a194e6d",
+		TraceID:          "e9c33e1c61bd4779953a55154c40944a",
+		SpanContext:      "test-span-context",
+		UserID:           "0455788f721f4d1185ca7b9df13a3483",
+		EventID:          3,   // nolint:gomnd
+		EventType:        301, // nolint:gomnd
+		EventLevel:       3,   //nolint:gomnd
+		ServiceName:      "test",
+		ClientIDs:        []string{"b1393b6444a44ebaba4156799fb7e2d1"},
+		TargetUserIDs:    []string{"fef576c71b8f44b1a78bcd74ac43ec27", "629ff6f7d0c34feca3f4056855416da2"},
+		TargetNamespace:  "publisher",
+		Privacy:          true,
+		AdditionalFields: mockAdditionalFields,
+		Version:          defaultVersion,
+		Payload:          mockPayload,
+	}
+
+	expectedHeaders := []Header{
+		{
+			Key:   "sequenceID",
+			Value: []byte(`{"abaafa8de77e4743a085ee10f41ddac5":20,"85ff6ae1361b4286aa8fc72ec9bf1e81":11,"38be0532113341adbc67691c14297ff2":5}`),
+		},
+	}
+
+	groupID := generateID()
+	err := client.Register(
+		NewSubscribe().
+			Topic(topicName).
+			EventName(mockEvent.EventName).
+			GroupID(groupID).
+			Offset(0).
+			Context(ctx).
+			CallbackWithHeaders(func(ctx context.Context, _ []byte, headers []Header, metadata *EventMetadata, err error) error {
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
+
+				if err != nil {
+					return err
+				}
+
+				require.NotEmpty(t, headers)
+				require.Equal(t, expectedHeaders, headers)
+				require.NotNil(t, metadata)
+				require.Equal(t, "somekey", metadata.Key)
+
+				doneChan <- true
+
+				return nil
+			}))
+	require.NoError(t, err)
+
+	err = client.Publish(
+		NewPublish().
+			Topic(topicName).
+			EventName(mockEvent.EventName).
+			Namespace(mockEvent.Namespace).
+			ClientID(mockEvent.ClientID).
+			UserID(mockEvent.UserID).
+			SessionID(mockEvent.SessionID).
+			TraceID(mockEvent.TraceID).
+			SpanContext(mockEvent.SpanContext).
+			EventID(mockEvent.EventID).
+			EventType(mockEvent.EventType).
+			EventLevel(mockEvent.EventLevel).
+			ServiceName(mockEvent.ServiceName).
+			ClientIDs(mockEvent.ClientIDs).
+			TargetUserIDs(mockEvent.TargetUserIDs).
+			TargetNamespace(mockEvent.TargetNamespace).
+			Privacy(mockEvent.Privacy).
+			AdditionalFields(mockEvent.AdditionalFields).
+			Context(context.Background()).
+			Timeout(10 * time.Second).
+			Payload(mockPayload).
+			Headers(expectedHeaders).
+			Key("somekey"))
+	require.NoError(t, err)
+
+	for {
+		select {
+		case <-doneChan:
+			return
+		case <-ctx.Done():
+			assert.FailNow(t, errorTimeout)
+		}
+	}
+}
