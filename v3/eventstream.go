@@ -35,8 +35,9 @@ const (
 	eventStreamStdout = "stdout"
 	eventStreamKafka  = "kafka"
 
-	actorTypeUser   = "USER"
-	actorTypeClient = "CLIENT"
+	actorTypeUser      = "USER"
+	actorTypeClient    = "CLIENT"
+	actorTypeAnonymous = "ANONYMOUS"
 )
 
 const (
@@ -77,7 +78,7 @@ type Event struct {
 	TargetNamespace   string                 `json:"target_namespace,omitempty"`
 	Privacy           bool                   `json:"privacy,omitempty"`
 	Topic             string                 `json:"topic,omitempty"`
-	SourceNamespace  string                  `json:"sourceNamespace,omitempty"`
+	SourceNamespace   string                 `json:"sourceNamespace,omitempty"`
 	AdditionalFields  map[string]interface{} `json:"additional_fields,omitempty"`
 	Payload           map[string]interface{} `json:"payload,omitempty"`
 
@@ -497,6 +498,11 @@ func (auditLogBuilder *AuditLogBuilder) IsActorTypeUser(isActorTypeUser bool) *A
 		auditLogBuilder.actorType = actorTypeClient
 	}
 
+	return auditLogBuilder
+}
+
+func (auditLogBuilder *AuditLogBuilder) WithAnonymousActorType() *AuditLogBuilder {
+	auditLogBuilder.actorType = actorTypeAnonymous
 	return auditLogBuilder
 }
 
