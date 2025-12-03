@@ -35,8 +35,9 @@ const (
 	eventStreamStdout = "stdout"
 	eventStreamKafka  = "kafka"
 
-	actorTypeUser   = "USER"
-	actorTypeClient = "CLIENT"
+	actorTypeUser      = "USER"
+	actorTypeClient    = "CLIENT"
+	actorTypeAnonymous = "ANONYMOUS"
 )
 
 const (
@@ -538,6 +539,11 @@ func (auditLogBuilder *AuditLogBuilder) IsActorTypeUser(isActorTypeUser bool) *A
 		auditLogBuilder.actorType = actorTypeClient
 	}
 
+	return auditLogBuilder
+}
+
+func (auditLogBuilder *AuditLogBuilder) WithAnonymousActorType() *AuditLogBuilder {
+	auditLogBuilder.actorType = actorTypeAnonymous
 	return auditLogBuilder
 }
 
