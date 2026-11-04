@@ -1,3 +1,5 @@
+// Deprecated: this module (v3 and v4) is no longer maintained and receives no
+// updates or security fixes. Do not use it for new development.
 module github.com/AccelByte/eventstream-go-sdk/v4
 
 go 1.18
